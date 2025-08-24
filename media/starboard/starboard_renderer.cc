@@ -14,9 +14,13 @@
 
 #include "media/starboard/starboard_renderer.h"
 
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
+#include "content/public/common/content_switches.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
@@ -144,7 +148,38 @@ StarboardRenderer::StarboardRenderer(
   DCHECK(task_runner_);
   DCHECK(media_log_);
   DCHECK(set_bounds_helper_);
-  LOG(INFO) << "StarboardRenderer constructed.";
+  
+  // [ABHIJEET][PUNCH-OUT] Log StarboardRenderer creation with detailed info
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRenderer CREATED"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Overlay Plane ID: " << overlay_plane_id
+            << " | Max Video Capabilities: " << max_video_capabilities
+            << " | Viewport Size: " << viewport_size.ToString()
+            << " | Audio Duration Local: " << audio_write_duration_local
+            << " | Audio Duration Remote: " << audio_write_duration_remote
+            << " | PURPOSE: GPU Process renderer for punch-out video (will create SbPlayerBridge)";
+            
+  // ARCHITECTURE DOCUMENTATION:
+  // StarboardRenderer lives in GPU Process and is the actual renderer implementation
+  // - Communicates with StarboardRendererClient (Renderer Process) via Mojo IPC
+  // - Creates and manages SbPlayerBridge for actual Starboard video playback
+  // - Sends geometry updates via VideoGeometrySetter to Browser Process
+  // - Handles punch-out vs decode-to-texture mode decisions
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRenderer ARCHITECTURE:"
+            << " | LOCATION: GPU Process (THIS=" << process_name << ")"
+            << " | CLIENT: StarboardRendererClient in Renderer Process"
+            << " | BRIDGE: Will create SbPlayerBridge for Starboard playback"
+            << " | GEOMETRY: Sends updates to VideoGeometrySetterService in Browser Process"
+            << " | MODE: Handles punch-out vs decode-to-texture video rendering";
 }
 
 StarboardRenderer::~StarboardRenderer() {
@@ -479,8 +514,42 @@ void StarboardRenderer::SetStarboardRendererCallbacks(
 }
 
 void StarboardRenderer::OnVideoGeometryChange(const gfx::Rect& output_rect) {
+  // [ABHIJEET][PUNCH-OUT] Log video geometry change - CRITICAL PUNCH-OUT OPERATION
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  // ============================================================================
+  // STEP 4 OF 4: STARBOARDRENDERER(GPU) → SBPLAYER PLATFORM FINAL POSITIONING
+  // ============================================================================
+  // 
+  // VALIDATED 4-STEP GEOMETRY FLOW - FINAL STEP:
+  // 1. [PREV] Compositor(GPU) → Browser Process (VideoGeometrySetterService)
+  // 2. [PREV] Browser Process → StarboardRendererClient(Renderer Process)
+  // 3. [PREV] StarboardRendererClient(Renderer) → StarboardRenderer(GPU Process)
+  // 4. [THIS STEP] StarboardRenderer(GPU) → SbPlayer Platform (actual video positioning)
+  //
+  // This is the FINAL step where StarboardRenderer in GPU Process calls the
+  // Starboard platform layer to actually position the hardware video overlay.
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VIDEO GEOMETRY CHANGE"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Output Rect: " << output_rect.ToString()
+            << " | X: " << output_rect.x() << " | Y: " << output_rect.y()
+            << " | Width: " << output_rect.width() << " | Height: " << output_rect.height()
+            << " | STEP: 4/4 - StarboardRenderer(GPU) → SbPlayer Platform"
+            << " | PURPOSE: FINAL STEP - Position hardware video overlay on screen";
+            
   set_bounds_helper_->SetBounds(output_rect.x(), output_rect.y(),
                                 output_rect.width(), output_rect.height());
+                                
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SbPlayerSetBounds CALLED via SetBoundsHelper"
+            << " | Bounds Updated: " << output_rect.ToString()
+            << " | STATUS: GEOMETRY FLOW COMPLETE - Video overlay positioned on hardware";
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -572,7 +641,24 @@ void StarboardRenderer::CreatePlayerBridge() {
   // number of active players.
   player_bridge_.reset();
 
-  LOG(INFO) << "Creating SbPlayerBridge.";
+  // [ABHIJEET][PUNCH-OUT] Log SbPlayerBridge creation - THE ACTUAL STARBOARD PLAYER CREATION
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] CREATING SbPlayerBridge - ACTUAL STARBOARD PLAYER"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Audio Codec: " << (audio_stream_ ? GetCodecName(audio_config.codec()) : "NONE")
+            << " | Video Codec: " << (video_stream_ ? GetCodecName(video_config.codec()) : "NONE")
+            << " | Audio MIME: " << audio_mime_type
+            << " | Video MIME: " << video_mime_type
+            << " | Max Video Capabilities: " << max_video_capabilities_
+            << " | DRM System: " << (SbDrmSystemIsValid(drm_system_) ? "VALID" : "INVALID")
+            << " | PURPOSE: This is the actual Starboard player creation for punch-out video";
 
   player_bridge_.reset(new SbPlayerBridge(
       GetSbPlayerInterface(), task_runner_,
@@ -596,12 +682,25 @@ void StarboardRenderer::CreatePlayerBridge() {
         HasRemoteAudioOutputs(player_bridge_->GetAudioConfigurations())
             ? audio_write_duration_remote_
             : audio_write_duration_local_;
-    LOG(INFO) << "SbPlayerBridge created, with audio write duration at "
-              << audio_write_duration_for_preroll_
-              << " and with max_video_capabilities_ at "
-              << max_video_capabilities_;
+            
+    // [ABHIJEET][PUNCH-OUT] Log successful SbPlayerBridge creation
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SbPlayerBridge CREATED SUCCESSFULLY"
+              << " | Process: " << process_name << " | PID: " << pid
+              << " | Audio Write Duration: " << audio_write_duration_for_preroll_
+              << " | Max Video Capabilities: " << max_video_capabilities_
+              << " | Audio Configurations: " << player_bridge_->GetAudioConfigurations().size()
+              << " | Remote Audio: " << (HasRemoteAudioOutputs(player_bridge_->GetAudioConfigurations()) ? "YES" : "NO")
+              << " | STATUS: Starboard player ready for punch-out video rendering";
   } else {
     error_message = player_bridge_->GetPlayerCreationErrorMessage();
+    
+    // [ABHIJEET][PUNCH-OUT] Log SbPlayerBridge creation failure
+    LOG(ERROR) << "[ABHIJEET][PUNCH-OUT] SbPlayerBridge CREATION FAILED"
+               << " | Process: " << process_name << " | PID: " << pid
+               << " | Error: " << error_message
+               << " | Audio Codec: " << (audio_stream_ ? GetCodecName(audio_config.codec()) : "NONE")
+               << " | Video Codec: " << (video_stream_ ? GetCodecName(video_config.codec()) : "NONE")
+               << " | CRITICAL: Unable to create Starboard player for punch-out video";
     player_bridge_.reset();
     LOG(INFO) << "Failed to create a valid SbPlayerBridge.";
   }
@@ -694,6 +793,27 @@ void StarboardRenderer::OnDemuxerStreamRead(
     return;
   }
 
+  // [ABHIJEET][PUNCH-OUT] StarboardRenderer::OnDemuxerStreamRead - DEMUXED DATA RECEIVED
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  std::string stream_type = (stream->type() == DemuxerStream::AUDIO) ? "AUDIO" : "VIDEO";
+  std::string status_str = (status == DemuxerStream::kOk) ? "OK" : 
+                          (status == DemuxerStream::kAborted) ? "ABORTED" : "CONFIG_CHANGED";
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRenderer::OnDemuxerStreamRead - DEMUXED DATA FROM PIPELINE"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Stream: " << stream_type
+            << " | Status: " << status_str
+            << " | Buffer Count: " << buffers.size()
+            << " | PURPOSE: Demuxed media data ready to forward to SbPlayer";
+
   if (pending_flush_cb_) {
     if (stream == audio_stream_) {
       DCHECK(audio_read_in_progress_);
@@ -724,6 +844,14 @@ void StarboardRenderer::OnDemuxerStreamRead(
           timestamp_of_last_written_audio_ = buffer->timestamp();
         }
       }
+      
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRenderer::OnDemuxerStreamRead - FORWARDING AUDIO TO SBPLAYER"
+                << " | Process: " << process_name
+                << " | Thread: " << base::PlatformThread::GetName()
+                << " | Buffer Count: " << buffers.size()
+                << " | Calling player_bridge_->WriteBuffers(AUDIO)"
+                << " | PURPOSE: Sending demuxed audio data to SbPlayer via SbPlayerBridge";
+      
       player_bridge_->WriteBuffers(DemuxerStream::AUDIO, buffers);
     } else {
       DCHECK(video_read_in_progress_);
@@ -733,6 +861,15 @@ void StarboardRenderer::OnDemuxerStreamRead(
           is_video_eos_written_ = true;
         }
       }
+      
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRenderer::OnDemuxerStreamRead - FORWARDING VIDEO TO SBPLAYER"
+                << " | Process: " << process_name
+                << " | Thread: " << base::PlatformThread::GetName()
+                << " | Buffer Count: " << buffers.size()
+                << " | EOS Written: " << (is_video_eos_written_ ? "YES" : "NO")
+                << " | Calling player_bridge_->WriteBuffers(VIDEO)"
+                << " | PURPOSE: Sending demuxed video data to SbPlayer via SbPlayerBridge";
+                
       player_bridge_->WriteBuffers(DemuxerStream::VIDEO, buffers);
     }
   } else if (status == DemuxerStream::kAborted) {

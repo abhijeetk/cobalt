@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/atomic_sequence_num.h"
+#include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
@@ -17,9 +18,11 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
+#include "base/process/process.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
@@ -27,10 +30,12 @@
 #include "cc/base/math_util.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/viz/client/client_resource_provider.h"
+#include "content/public/common/content_switches.h"
 #include "components/viz/client/shared_bitmap_reporter.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/video_hole_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
@@ -676,6 +681,24 @@ void VideoResourceUpdater::AppendQuads(
     int sorting_context_id) {
   DCHECK(frame.get());
 
+  // [ABHIJEET][PUNCH-OUT] VideoResourceUpdater::AppendQuads - CONVERTING VIDEOFRAME TO DRAW QUADS
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoResourceUpdater::AppendQuads - VIDEOFRAME TO DRAW QUAD CONVERSION"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | VideoFrame Format: " << static_cast<int>(frame->format())
+            << " | Frame Resource Type: " << static_cast<int>(frame_resource_type_)
+            << " | Quad Rect: " << quad_rect.ToString()
+            << " | Visible Quad Rect: " << visible_quad_rect.ToString()
+            << " | PURPOSE: Converting VideoFrame to compositor draw quad based on frame resource type";
+
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(
@@ -697,10 +720,63 @@ void VideoResourceUpdater::AppendQuads(
 
   switch (frame_resource_type_) {
     case VideoFrameResourceType::VIDEO_HOLE: {
+      // [ABHIJEET][PUNCH-OUT] CRITICAL: VideoResourceUpdater creating VideoHoleDrawQuad
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoResourceUpdater::AppendQuads - CREATING VIDEOHOLEDRAWQUAD"
+                << " | Process: " << process_name << " | PID: " << pid
+                << " | Thread: " << base::PlatformThread::GetName()
+                << " | PIXEL_FORMAT_HOLE VideoFrame → VideoHoleDrawQuad conversion"
+                << " | Overlay Plane ID: " << overlay_plane_id_.ToString()
+                << " | Quad Rect: " << quad_rect.ToString()
+                << " | Visible Quad Rect: " << visible_quad_rect.ToString()
+                << " | PURPOSE: Converting PIXEL_FORMAT_HOLE VideoFrame to VideoHoleDrawQuad for compositor processing";
+                
       auto* video_hole_quad =
           render_pass->CreateAndAppendDrawQuad<viz::VideoHoleDrawQuad>();
       video_hole_quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect,
                               overlay_plane_id_);
+
+#if 0  // [ABHIJEET][PUNCH-OUT] DISABLED: Red debug borders not working - user requested disable
+      // DEBUG STRATEGY: Create a SolidColorDrawQuad BEFORE the VideoHoleDrawQuad 
+      // This red quad will be rendered first, then the transparent hole on top
+      // Result: Red border visible around the transparent video hole area
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] ADDING VISUAL DEBUG BORDER at VideoHoleDrawQuad creation"
+                << " | Hole Rect: " << quad_rect.ToString()
+                << " | Strategy: Red SolidColorDrawQuad behind transparent hole"
+                << " | Purpose: Visual identification of punch-out video holes";
+      
+      int border_width = 6;  // Thick border for easy visibility  
+      gfx::Rect border_rect(quad_rect.x() - border_width, 
+                           quad_rect.y() - border_width,
+                           quad_rect.width() + 2*border_width,
+                           quad_rect.height() + 2*border_width);
+                           
+      // Clamp to positive coordinates to avoid rendering issues
+      if (border_rect.x() < 0) {
+        border_rect.set_width(border_rect.width() + border_rect.x());
+        border_rect.set_x(0);
+      }
+      if (border_rect.y() < 0) {
+        border_rect.set_height(border_rect.height() + border_rect.y());
+        border_rect.set_y(0);
+      }
+      
+      // Create red background quad BEFORE hole quad (so hole renders on top)
+      auto* debug_quad = render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+      debug_quad->SetNew(shared_quad_state, border_rect, border_rect,
+                        SkColor4f{1.0f, 0.0f, 0.0f, 0.8f},  // Semi-transparent red
+                        false);  // not anti-aliased
+                        
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] DEBUG BORDER QUAD ADDED"
+                << " | Border Rect: " << border_rect.ToString()  
+                << " | Color: Semi-transparent red (80% opacity)"
+                << " | Render Order: Red quad first, then transparent hole on top"
+                << " | Expected Result: Red border visible around video hole area";
+#endif
+                              
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoResourceUpdater::AppendQuads - VIDEOHOLEDRAWQUAD CREATED"
+                << " | VideoHoleDrawQuad added to render pass"
+                << " | Overlay Plane ID: " << overlay_plane_id_.ToString()
+                << " | PURPOSE: VideoHoleDrawQuad will be processed by OverlayStrategyUnderlayStarboard";
       break;
     }
     case VideoFrameResourceType::YUV:

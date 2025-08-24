@@ -274,6 +274,14 @@ std::unique_ptr<MediaCodecBridge> MediaCodecBridge::CreateVideoMediaCodecBridge(
   ScopedJavaLocalRef<jobject> j_create_media_codec_bridge_result(
       Java_CreateMediaCodecBridgeResult_Constructor(env));
 
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaCodecBridge::CreateVideoMediaCodecBridge - CREATING JNI BRIDGE TO ANDROID MEDIACODEC"
+               << " | Decoder Name: " << decoder_name
+               << " | MIME Type: " << mime
+               << " | Resolution: " << width_hint << "x" << height_hint
+               << " | Surface: " << (j_surface ? "PROVIDED" : "NULL")
+               << " | Tunnel Mode Session: " << tunnel_mode_audio_session_id
+               << " | PURPOSE: Creating JNI bridge that will connect C++ to Java MediaCodec with Surface";
+
   std::unique_ptr<MediaCodecBridge> native_media_codec_bridge(
       new MediaCodecBridge(handler));
   ScopedJavaLocalRef<jobject> j_surface_local(env, env->NewLocalRef(j_surface));
@@ -296,8 +304,13 @@ std::unique_ptr<MediaCodecBridge> MediaCodecBridge::CreateVideoMediaCodecBridge(
         Java_CreateMediaCodecBridgeResult_errorMessage(
             env, j_create_media_codec_bridge_result));
     *error_message = ConvertJavaStringToUTF8(env, j_error_message);
+    SB_LOG(ERROR) << "[ABHIJEET][PUNCH-OUT] MediaCodecBridge::CreateVideoMediaCodecBridge - FAILED TO CREATE JAVA MEDIACODEC"
+                  << " | Error: " << *error_message;
     return nullptr;
   }
+
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaCodecBridge::CreateVideoMediaCodecBridge - JAVA MEDIACODEC CREATED SUCCESSFULLY"
+               << " | PURPOSE: Java MediaCodec is now configured with Surface and ready for decoding/rendering";
 
   native_media_codec_bridge->Initialize(j_media_codec_bridge.obj());
   return native_media_codec_bridge;
@@ -390,6 +403,12 @@ void MediaCodecBridge::ReleaseOutputBuffer(jint index, jboolean render) {
 void MediaCodecBridge::ReleaseOutputBufferAtTimestamp(
     jint index,
     jlong render_timestamp_ns) {
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaCodecBridge::ReleaseOutputBufferAtTimestamp - C++ JNI BRIDGE TO JAVA RENDERING"
+               << " | Buffer Index: " << index
+               << " | Render Timestamp: " << render_timestamp_ns << " ns"
+               << " | PURPOSE: C++ JNI bridge calling Java MediaCodec to trigger hardware rendering"
+               << " | NEXT STEP: JNI call to Java MediaCodecBridge.releaseOutputBufferAtTimestamp()";
+
   JNIEnv* env = AttachCurrentThread();
   Java_MediaCodecBridge_releaseOutputBufferAtTimestamp(
       env, j_media_codec_bridge_, index, render_timestamp_ns);

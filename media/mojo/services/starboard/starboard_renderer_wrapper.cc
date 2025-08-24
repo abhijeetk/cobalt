@@ -16,9 +16,14 @@
 
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
+#include "base/process/process.h"
 #include "base/task/bind_post_task.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "content/public/common/content_switches.h"
 #include "media/base/starboard/starboard_rendering_mode.h"
 #include "media/mojo/services/mojo_media_log.h"
 
@@ -46,6 +51,36 @@ StarboardRendererWrapper::StarboardRendererWrapper(
 #endif  // BUILDFLAG(IS_ANDROID)
       ) {
   DETACH_FROM_THREAD(thread_checker_);
+  
+  // [ABHIJEET][PUNCH-OUT] Log StarboardRendererWrapper creation
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRendererWrapper CREATED"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Overlay Plane ID: " << traits.overlay_plane_id
+            << " | Max Video Capabilities: " << traits.max_video_capabilities
+            << " | Viewport Size: " << traits.viewport_size.ToString()
+            << " | PURPOSE: Mojo service wrapper around StarboardRenderer in GPU process";
+            
+  // IPC WRAPPER ARCHITECTURE DOCUMENTATION:
+  // StarboardRendererWrapper is the Mojo service implementation that:
+  // - Receives Mojo IPC calls from StarboardRendererClient (Renderer Process)
+  // - Wraps the actual StarboardRenderer (same GPU Process)
+  // - Forwards calls to the StarboardRenderer
+  // - Manages cross-process communication for punch-out video
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] WRAPPER ARCHITECTURE:"
+            << " | THIS WRAPPER: Mojo service in GPU Process"
+            << " | WRAPS: StarboardRenderer (same GPU Process)"
+            << " | CLIENT: StarboardRendererClient in Renderer Process"
+            << " | PURPOSE: IPC bridge for cross-process punch-out video communication";
+  
   base::SequenceBound<StarboardGpuFactoryImpl> gpu_factory_impl(
       traits.gpu_task_runner,
       std::move(traits.get_starboard_command_buffer_stub_cb));

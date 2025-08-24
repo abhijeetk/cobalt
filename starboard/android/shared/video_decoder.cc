@@ -207,6 +207,14 @@ class VideoFrameImpl : public VideoFrame {
 
   ~VideoFrameImpl() {
     if (!released_) {
+      // [ABHIJEET][PUNCH-OUT] VIDEO FRAME DISPOSAL WITHOUT RENDERING
+      SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameImpl::~VideoFrameImpl - DISPOSING VIDEO FRAME WITHOUT RENDERING"
+                   << " | Buffer Index: " << dequeue_output_result_.index
+                   << " | Frame Timestamp: " << (is_end_of_stream() ? "EOS" : std::to_string(timestamp()))
+                   << " | Is End of Stream: " << (is_end_of_stream() ? "YES" : "NO")
+                   << " | PURPOSE: Releasing video frame buffer back to MediaCodec without rendering"
+                   << " | REASON: Frame was decoded but not displayed (dropped frame or cleanup)";
+                   
       media_codec_bridge_->ReleaseOutputBuffer(dequeue_output_result_.index,
                                                false);
       if (!is_end_of_stream()) {
@@ -218,9 +226,24 @@ class VideoFrameImpl : public VideoFrame {
   void Draw(int64_t release_time_in_nanoseconds) {
     SB_DCHECK(!released_);
     SB_DCHECK(!is_end_of_stream());
+    
+    // [ABHIJEET][PUNCH-OUT] CRITICAL: THIS IS WHERE DECODED VIDEO DATA IS PAINTED TO HARDWARE SURFACE
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameImpl::Draw - PAINTING DECODED VIDEO DATA TO HARDWARE SURFACE"
+                 << " | Buffer Index: " << dequeue_output_result_.index
+                 << " | Release Time: " << release_time_in_nanoseconds << " ns"
+                 << " | Frame Timestamp: " << (is_end_of_stream() ? "EOS" : std::to_string(timestamp()))
+                 << " | PURPOSE: This call renders the decoded video frame to Android's hardware video overlay"
+                 << " | HARDWARE PATH: MediaCodec → SurfaceView → Hardware Video Overlay";
+    
     released_ = true;
     media_codec_bridge_->ReleaseOutputBufferAtTimestamp(
         dequeue_output_result_.index, release_time_in_nanoseconds);
+        
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameImpl::Draw - FRAME RENDERED TO HARDWARE"
+                 << " | Buffer Index: " << dequeue_output_result_.index << " released to hardware overlay"
+                 << " | RESULT: Decoded video frame is now visible on Android hardware surface"
+                 << " | NEXT: Hardware overlay will composite this frame with UI elements";
+    
     release_callback_();
   }
 
@@ -422,6 +445,14 @@ VideoDecoder::VideoDecoder(const VideoStreamInfo& video_stream_info,
     }
   }
 
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoDecoder Constructor - CREATING STARBOARD C++ VIDEO DECODER (TOP-LEVEL CONTROL)"
+               << " | Codec: " << GetMediaVideoCodecName(video_codec_)
+               << " | Output Mode: " << GetPlayerOutputModeName(output_mode_)
+               << " | Max Capabilities: \"" << max_video_capabilities_ << "\""
+               << " | Tunnel Mode Session: " << tunnel_mode_audio_session_id_
+               << " | Software Decoder Required: " << (require_software_codec_ ? "YES" : "NO")
+               << " | PURPOSE: This is the TOP-LEVEL Starboard C++ decoder that controls the entire video pipeline";
+
   SB_LOG(INFO) << "Created VideoDecoder for codec "
                << GetMediaVideoCodecName(video_codec_) << ", with output mode "
                << GetPlayerOutputModeName(output_mode_)
@@ -431,6 +462,11 @@ VideoDecoder::VideoDecoder(const VideoStreamInfo& video_stream_info,
 }
 
 VideoDecoder::~VideoDecoder() {
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoDecoder Destructor - DESTROYING STARBOARD C++ VIDEO DECODER"
+               << " | Codec: " << GetMediaVideoCodecName(video_codec_)
+               << " | Output Mode: " << GetPlayerOutputModeName(output_mode_)
+               << " | PURPOSE: Cleaning up the top-level Starboard video decoder and releasing Surface";
+
   TeardownCodec();
   if (tunnel_mode_audio_session_id_ != -1) {
     ClearVideoWindow(force_reset_surface_under_tunnel_mode_);
@@ -686,6 +722,7 @@ bool VideoDecoder::InitializeCodec(const VideoStreamInfo& video_stream_info,
     SB_DCHECK_GT(video_fps_, 0);
   }
 
+  // [ABHIJEET][PUNCH-OUT] vs [ABHIJEET][DTT] OUTPUT MODE SETUP:
   // Setup the output surface object.  If we are in punch-out mode, target
   // the passed in Android video surface.  If we are in decode-to-texture
   // mode, create a surface from a new texture target and use that as the
@@ -693,12 +730,20 @@ bool VideoDecoder::InitializeCodec(const VideoStreamInfo& video_stream_info,
   jobject j_output_surface = NULL;
   switch (output_mode_) {
     case kSbPlayerOutputModePunchOut: {
+      SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] Attempting to acquire THE SINGLE hardware video surface";
       j_output_surface = AcquireVideoSurface();
       if (j_output_surface) {
         owns_video_surface_ = true;
+        SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SUCCESS - Video decoder now owns hardware overlay surface";
+      } else {
+        SB_LOG(ERROR) << "[ABHIJEET][PUNCH-OUT] FAILED - Could not acquire hardware video surface (likely already in use)";
       }
     } break;
     case kSbPlayerOutputModeDecodeToTexture: {
+      SB_LOG(INFO) << "[ABHIJEET][DTT] Setting up decode-to-texture mode (no hardware overlay needed)";
+      // [ABHIJEET][DTT] DECODE-TO-TEXTURE MODE:
+      // This mode doesn't need the hardware video surface. Instead, it creates
+      // a texture that can be composited by the GPU along with other UI elements.
       // A width and height of (0, 0) is provided here because Android doesn't
       // actually allocate any memory into the texture at this time.  That is
       // done behind the scenes, the acquired texture is not actually backed
@@ -743,6 +788,11 @@ bool VideoDecoder::InitializeCodec(const VideoStreamInfo& video_stream_info,
   ParseMaxResolution(max_video_capabilities_, video_stream_info.frame_size,
                      &max_width, &max_height);
 
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoDecoder::InitializeCodec - CREATING MEDIADECODER (C++ WRAPPER LAYER)"
+               << " | Frame Size: " << video_stream_info.frame_size.width << "x" << video_stream_info.frame_size.height
+               << " | Surface: " << (j_output_surface ? "VALID" : "NULL")
+               << " | PURPOSE: Creating C++ MediaDecoder that will manage Android MediaCodec";
+
   media_decoder_.reset(new MediaDecoder(
       this, video_stream_info.codec, video_stream_info.frame_size.width,
       video_stream_info.frame_size.height, max_width, max_height, video_fps_,
@@ -753,6 +803,8 @@ bool VideoDecoder::InitializeCodec(const VideoStreamInfo& video_stream_info,
       tunnel_mode_audio_session_id_, force_big_endian_hdr_metadata_,
       max_video_input_size_, flush_delay_usec_, error_message));
   if (media_decoder_->is_valid()) {
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoDecoder::InitializeCodec - MEDIADECODER CREATED SUCCESSFULLY"
+                 << " | PURPOSE: C++ MediaDecoder wrapper is ready, Android MediaCodec configured with Surface";
     if (error_cb_) {
       media_decoder_->Initialize(
           std::bind(&VideoDecoder::ReportError, this, _1, _2));

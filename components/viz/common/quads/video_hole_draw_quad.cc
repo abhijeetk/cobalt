@@ -7,6 +7,11 @@
 #include <stddef.h>
 #include "base/trace_event/traced_value.h"
 #include "base/values.h"
+#include "base/logging.h"
+#include "base/command_line.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
+#include "content/public/common/content_switches.h"
 
 namespace viz {
 
@@ -24,6 +29,24 @@ void VideoHoleDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
                    visible_rect,
                    /*needs_blending=*/false);
   overlay_plane_id = plane_id;
+  
+  // [ABHIJEET][PUNCH-OUT] Log VideoHoleDrawQuad creation - COMPOSITOR THREAD
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoHoleDrawQuad::SetNew - STEP 2/4: QUAD TREE INTEGRATION"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Overlay Plane ID: " << plane_id.ToString()
+            << " | Rect: " << rect.ToString()
+            << " | Visible Rect: " << visible_rect.ToString()
+            << " | STEP: 2/4 - VideoHoleDrawQuad integrates hole into compositor quad tree (GPU Process)"
+            << " | PURPOSE: Hole quad created in compositor for transparent video area";
 }
 
 void VideoHoleDrawQuad::SetAll(const SharedQuadState* shared_quad_state,

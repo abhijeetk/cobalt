@@ -28,6 +28,11 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/overlay_transform_utils.h"
 #include "ui/gfx/video_types.h"
+#include "base/command_line.h"
+#include "base/logging.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
+#include "content/public/common/content_switches.h"
 
 namespace viz {
 
@@ -468,6 +473,23 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromSolidColorQuad(
 OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromVideoHoleQuad(
     const VideoHoleDrawQuad* quad,
     OverlayCandidate& candidate) const {
+  // [ABHIJEET][PUNCH-OUT] Log VideoHoleQuad to OverlayCandidate conversion
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] OverlayCandidateFactory::FromVideoHoleQuad - STEP 3/4: OVERLAY PROCESSING"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Overlay Plane ID: " << quad->overlay_plane_id.ToString()
+            << " | Quad Rect: " << quad->rect.ToString()
+            << " | STEP: 3/4 - OverlayCandidateFactory converts hole to overlay candidate (GPU Process - Compositor Thread)"
+            << " | PURPOSE: Processing VideoHoleDrawQuad for overlay strategy evaluation";
+  
   candidate.display_rect = gfx::RectF(quad->rect);
   const SharedQuadState* sqs = quad->shared_quad_state;
   if (supports_arbitrary_transform_) {
@@ -488,6 +510,14 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromVideoHoleQuad(
 
   AssignDamage(quad, candidate);
   candidate.tracking_id = base::FastHash(quad->overlay_plane_id.AsBytes());
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] OverlayCandidateFactory::FromVideoHoleQuad - STEP 3/4 COMPLETE: OVERLAY CANDIDATE READY"
+            << " | Display Rect: " << candidate.display_rect.ToString()
+            << " | Is Opaque: " << (candidate.is_opaque ? "YES" : "NO")
+            << " | Has Mask Filter: " << (candidate.has_mask_filter ? "YES" : "NO")
+            << " | Tracking ID: " << candidate.tracking_id
+            << " | STEP: 3/4 COMPLETE - OverlayCandidate created (GPU Process - Compositor Thread)"
+            << " | PURPOSE: Ready for OverlayStrategyUnderlayStarboard processing";
 
   return CandidateStatus::kSuccess;
 }

@@ -4,9 +4,14 @@
 
 #include "cc/layers/video_frame_provider_client_impl.h"
 
+#include "base/command_line.h"
+#include "base/logging.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/video_layer_impl.h"
+#include "content/public/common/content_switches.h"
 #include "media/base/video_frame.h"
 
 namespace cc {
@@ -136,9 +141,34 @@ void VideoFrameProviderClientImpl::DidReceiveFrame() {
                "active_video_layer",
                !!active_video_layer_);
   DCHECK(thread_checker_.CalledOnValidThread());
+  
+  // [ABHIJEET][PUNCH-OUT] VideoFrameProviderClientImpl::DidReceiveFrame - COMPOSITOR LAYER RECEIVES FRAME
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameProviderClientImpl::DidReceiveFrame - COMPOSITOR VIDEO LAYER UPDATE"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Active Video Layer: " << (active_video_layer_ ? "YES" : "NO")
+            << " | Setting needs_put_current_frame_ = true"
+            << " | PURPOSE: Video layer received frame update, triggering compositor redraw";
+  
   needs_put_current_frame_ = true;
-  if (active_video_layer_)
+  if (active_video_layer_) {
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameProviderClientImpl::DidReceiveFrame - TRIGGERING COMPOSITOR REDRAW"
+              << " | Calling active_video_layer_->SetNeedsRedraw()"
+              << " | PURPOSE: Tell compositor that video layer needs to be redrawn with new frame";
     active_video_layer_->SetNeedsRedraw();
+  } else {
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameProviderClientImpl::DidReceiveFrame - NO ACTIVE VIDEO LAYER"
+              << " | Active Video Layer: NULL"
+              << " | PURPOSE: Frame received but no active layer to trigger redraw";
+  }
 }
 
 void VideoFrameProviderClientImpl::OnBeginFrame(

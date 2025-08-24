@@ -14,9 +14,14 @@
 
 #include "media/mojo/clients/starboard/starboard_renderer_client.h"
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
+#include "content/public/common/content_switches.h"
 #include "media/base/media_log.h"
 #include "media/base/media_resource.h"
 #include "media/base/video_frame.h"
@@ -66,7 +71,34 @@ StarboardRendererClient::StarboardRendererClient(
   DCHECK(video_renderer_sink_);
   DCHECK(video_overlay_factory_);
   DCHECK(bind_host_receiver_callback_);
-  LOG(INFO) << "StarboardRendererClient constructed.";
+  
+  // [ABHIJEET][PUNCH-OUT] Log StarboardRendererClient creation - THE SUBSCRIBER AND VIDEO HOLE CREATOR
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRendererClient CREATED - GEOMETRY SUBSCRIBER & VIDEO HOLE CREATOR"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | LOCATION: Media Thread in Renderer Process"
+            << " | Overlay Plane ID: " << video_overlay_factory_->overlay_plane_id()
+            << " | PURPOSE: Creates video holes and subscribes to geometry updates";
+            
+  // CLIENT ARCHITECTURE DOCUMENTATION:
+  // StarboardRendererClient is the SUBSCRIBER that:
+  // - Lives in Media Thread in Renderer Process 
+  // - Subscribes to VideoGeometrySetterService in Browser Process
+  // - Creates video holes (VideoHoleDrawQuad) via VideoRendererSink
+  // - Communicates with StarboardRenderer in GPU Process via Mojo
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] CLIENT ARCHITECTURE:"
+            << " | THIS CLIENT: Renderer Process Media Thread"
+            << " | SUBSCRIBES TO: VideoGeometrySetterService in Browser Process"
+            << " | CREATES: Video holes (VideoHoleDrawQuad) via VideoRendererSink"
+            << " | COMMUNICATES WITH: StarboardRenderer in GPU Process via Mojo IPC";
 }
 
 StarboardRendererClient::~StarboardRendererClient() {
@@ -90,12 +122,33 @@ void StarboardRendererClient::Initialize(MediaResource* media_resource,
   client_ = client;
   init_cb_ = std::move(init_cb);
 
+  // [ABHIJEET][PUNCH-OUT] CRITICAL GEOMETRY SUBSCRIPTION - THE SUBSCRIBER SETUP
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] GEOMETRY SUBSCRIPTION SETUP"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Overlay Plane ID: " << video_overlay_factory_->overlay_plane_id()
+            << " | PURPOSE: Setting up subscription to receive geometry updates from Browser Process";
+  
   // Bind the receiver of VideoGeometryChangeSubscriber on renderer Thread.
   // This uses BindPostTaskToCurrentDefault() to ensure the callback is ran
   // on renderer thread, not media thread.
   bind_host_receiver_callback_.Run(
       video_geometry_change_subcriber_remote_.BindNewPipeAndPassReceiver());
   DCHECK(video_geometry_change_subcriber_remote_);
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SUBSCRIBING TO GEOMETRY CHANGES"
+            << " | HOST: VideoGeometrySetterService in Browser Process"
+            << " | CLIENT: THIS StarboardRendererClient (Media Thread)"
+            << " | PURPOSE: Will receive geometry updates for punch-out video hole positioning";
+            
   video_geometry_change_subcriber_remote_->SubscribeToVideoGeometryChange(
       video_overlay_factory_->overlay_plane_id(),
       video_geometry_change_client_receiver_.BindNewPipeAndPassRemote(),
@@ -198,6 +251,14 @@ scoped_refptr<VideoFrame> StarboardRendererClient::Render(
   // This is called on VideoFrameCompositor thread.
   DCHECK_EQ(rendering_mode_, StarboardRenderingMode::kDecodeToTexture);
   DCHECK(!media_task_runner_->RunsTasksInCurrentSequence());
+  
+  // [ABHIJEET][PUNCH-OUT] DECODE-TO-TEXTURE RENDER PATH - CALLBACK-DRIVEN VIDEO RENDERING
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRendererClient::Render - DECODE-TO-TEXTURE CALLBACK"
+            << " | Thread: " << base::PlatformThread::GetName()
+            << " | Mode: DECODE_TO_TEXTURE (confirmed via DCHECK)"
+            << " | Deadline Min: " << deadline_min.ToInternalValue()
+            << " | Deadline Max: " << deadline_max.ToInternalValue()
+            << " | PURPOSE: VideoFrameCompositor requesting video frame for texture-based rendering";
   media_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&StarboardRendererClient::UpdateCurrentFrame,
                                 weak_factory_.GetWeakPtr()));
@@ -207,6 +268,13 @@ scoped_refptr<VideoFrame> StarboardRendererClient::Render(
     base::AutoLock auto_lock(lock_);
     frame_to_render = next_video_frame_;
   }
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] StarboardRendererClient::Render - RETURNING VIDEO FRAME"
+            << " | Frame: " << (frame_to_render ? "VALID" : "NULL")
+            << " | Format: " << (frame_to_render ? static_cast<int>(frame_to_render->format()) : -1)
+            << " | Size: " << (frame_to_render ? frame_to_render->natural_size().ToString() : "NULL")
+            << " | PURPOSE: VideoFrame returned to VideoFrameCompositor for texture-based rendering";
+            
   return frame_to_render;
 }
 
@@ -224,16 +292,92 @@ base::TimeDelta StarboardRendererClient::GetPreferredRenderInterval() {
 
 void StarboardRendererClient::PaintVideoHoleFrame(const gfx::Size& size) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  
+  // [ABHIJEET][PUNCH-OUT] CRITICAL VIDEO HOLE CREATION - THE ACTUAL HOLE CREATION
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] CREATING VIDEO HOLE FRAME - THE ACTUAL PUNCH-OUT HOLE"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Video Size: " << size.ToString()
+            << " | Width: " << size.width() << " | Height: " << size.height()
+            << " | Overlay Plane ID: " << video_overlay_factory_->overlay_plane_id()
+            << " | PURPOSE: Creating VideoHoleDrawQuad for punch-out video rendering";
+  
   // This could be called from StarboardRenderer
   // before UpdateStarboardRenderingMode(), so this is not
   // required |rendering_mode_| equals to StarboardRenderingMode::kPunchOut.
-  video_renderer_sink_->PaintSingleFrame(
-      video_overlay_factory_->CreateFrame(size));
+  
+  // VIDEO HOLE CREATION PROCESS:
+  // 1. video_overlay_factory_->CreateFrame() creates VideoHoleDrawQuad
+  // 2. video_renderer_sink_->PaintSingleFrame() sends it to compositor
+  // 3. Compositor creates transparent hole for hardware video overlay
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VIDEO HOLE CREATION FLOW:"
+            << " | STEP 1: VideoOverlayFactory->CreateFrame() creates VideoHoleDrawQuad"
+            << " | STEP 2: VideoRendererSink->PaintSingleFrame() sends to compositor"
+            << " | STEP 3: Compositor creates transparent hole for hardware overlay"
+            << " | RESULT: Transparent hole created in UI for video content";
+            
+  // [ABHIJEET][PUNCH-OUT] CRITICAL: VideoFrame creation and sink forwarding
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] CREATING AND FORWARDING VIDEO HOLE FRAME\""
+            << " | Creating VideoFrame: video_overlay_factory_->CreateFrame(" << size.ToString() << ")"
+            << " | Overlay Plane ID: " << video_overlay_factory_->overlay_plane_id()
+            << " | PURPOSE: Creating VideoHoleDrawQuad and sending to VideoRendererSink";
+            
+  scoped_refptr<VideoFrame> hole_frame = video_overlay_factory_->CreateFrame(size);
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VIDEO HOLE FRAME CREATED - FORWARDING TO COMPOSITOR\""
+            << " | VideoFrame Created: " << (hole_frame ? "SUCCESS" : "FAILED")
+            << " | VideoFrame Format: " << (hole_frame ? static_cast<int>(hole_frame->format()) : -1)
+            << " | Sending to: video_renderer_sink_->PaintSingleFrame()"
+            << " | PURPOSE: VideoRendererSink will forward this VideoHoleDrawQuad to compositor";
+            
+  video_renderer_sink_->PaintSingleFrame(hole_frame);
+      
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VIDEO HOLE FRAME PAINTED"
+            << " | VideoHoleDrawQuad sent to compositor"
+            << " | Punch-out hole created for hardware video overlay";
 }
 
 void StarboardRendererClient::UpdateStarboardRenderingMode(
     const StarboardRenderingMode mode) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  
+  // [ABHIJEET][PUNCH-OUT] CRITICAL BRANCHING POINT - DECODE-TO-TEXTURE vs PUNCH-OUT
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  std::string mode_str;
+  switch (mode) {
+    case StarboardRenderingMode::kDecodeToTexture:
+      mode_str = "DECODE_TO_TEXTURE";
+      break;
+    case StarboardRenderingMode::kPunchOut:
+      mode_str = "PUNCH_OUT";
+      break;
+    case StarboardRenderingMode::kInvalid:
+      mode_str = "INVALID";
+      break;
+  }
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] UpdateStarboardRenderingMode - RENDERING PATH DECISION"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Previous Mode: " << static_cast<int>(rendering_mode_)
+            << " | NEW MODE: " << mode_str << " (" << static_cast<int>(mode) << ")"
+            << " | PURPOSE: CRITICAL BRANCHING POINT - determines decode-to-texture vs punch-out rendering path";
+  
   rendering_mode_ = mode;
   switch (rendering_mode_) {
     case StarboardRenderingMode::kPunchOut:
@@ -241,6 +385,12 @@ void StarboardRendererClient::UpdateStarboardRenderingMode(
       // frame via VideoRendererSink::RenderCallback::Render().
       // The video frame is handled by Sbplayer, and render to its
       // surface directly.
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] PUNCH-OUT MODE ACTIVATED"
+                << " | Path: Video handled by SbPlayer directly (hardware overlay)"
+                << " | VideoRendererSink: " << (is_playing_ ? "STOPPING" : "ALREADY_STOPPED")
+                << " | Video rendering: Direct to hardware surface (bypass compositor)"
+                << " | PaintVideoHoleFrame: Creates transparent holes for overlays"
+                << " | PURPOSE: Hardware-accelerated video with compositor holes";
       if (is_playing_) {
         StopVideoRendererSink();
       } else {
@@ -251,6 +401,12 @@ void StarboardRendererClient::UpdateStarboardRenderingMode(
     case StarboardRenderingMode::kDecodeToTexture:
       // StarboardRenderingMode::kDecodeToTexture needs to update
       // video frame via VideoRendererSink::RenderCallback::Render().
+      LOG(INFO) << "[ABHIJEET][PUNCH-OUT] DECODE-TO-TEXTURE MODE ACTIVATED"
+                << " | Path: Video handled via VideoRendererSink callbacks"
+                << " | VideoRendererSink: " << (is_playing_ ? "STARTING" : "WILL_START_ON_PLAY")
+                << " | Video rendering: Through compositor (CPU/GPU textures)"
+                << " | Render(): Called periodically to get video frames"
+                << " | PURPOSE: Software/GPU texture-based video rendering through compositor";
       if (is_playing_) {
         StartVideoRendererSink();
       } else {
@@ -288,8 +444,54 @@ void StarboardRendererClient::OnVideoGeometryChange(
     const gfx::RectF& rect_f,
     gfx::OverlayTransform /* transform */) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  
+  // [ABHIJEET][PUNCH-OUT] GEOMETRY UPDATE RECEIVED - THE SUBSCRIBER RECEIVES UPDATE
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
   gfx::Rect new_bounds = gfx::ToEnclosingRect(rect_f);
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] GEOMETRY UPDATE RECEIVED BY SUBSCRIBER"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Source Rect: " << rect_f.ToString()
+            << " | New Bounds: " << new_bounds.ToString()
+            << " | X: " << new_bounds.x() << " | Y: " << new_bounds.y()
+            << " | Width: " << new_bounds.width() << " | Height: " << new_bounds.height()
+            << " | PURPOSE: Forwarding geometry update to StarboardRenderer in GPU process";
+            
+  // GEOMETRY UPDATE FLOW:
+  // 1. Received from VideoGeometrySetterService (Browser Process)
+  // 2. Forward to StarboardRenderer (GPU Process) via Mojo
+  // 3. StarboardRenderer will update SbPlayerSetBounds
+  // ============================================================================
+  // STEP 3 OF 4: STARBOARDRENDERERCLIENT(RENDERER) → STARBOARDRENDERER(GPU) FORWARDING
+  // ============================================================================
+  // 
+  // VALIDATED 4-STEP GEOMETRY FLOW:
+  // 1. [PREV] Compositor(GPU) → Browser Process (VideoGeometrySetterService)
+  // 2. [PREV] Browser Process → StarboardRendererClient(Renderer Process)
+  // 3. [THIS STEP] StarboardRendererClient(Renderer) → StarboardRenderer(GPU Process)
+  // 4. [FINAL] StarboardRenderer(GPU) → SbPlayer Platform (actual video positioning)
+  //
+  // This is the THIRD step where StarboardRendererClient in Renderer Process forwards
+  // geometry updates to StarboardRenderer in GPU Process via direct Mojo pipe.
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] FORWARDING GEOMETRY TO GPU PROCESS"
+            << " | FROM: VideoGeometrySetterService (Browser Process)"
+            << " | TO: StarboardRenderer (GPU Process) via renderer_extension_"
+            << " | STEP: 3/4 - StarboardRendererClient(Renderer) → StarboardRenderer(GPU)"
+            << " | PURPOSE: Direct Renderer→GPU communication for final positioning";
+            
   renderer_extension_->OnVideoGeometryChange(new_bounds);
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] GEOMETRY UPDATE FORWARDED TO STARBOARD RENDERER"
+            << " | NEXT: StarboardRenderer will call SbPlayerSetBounds for platform positioning";
 }
 
 void StarboardRendererClient::OnConnectionError() {

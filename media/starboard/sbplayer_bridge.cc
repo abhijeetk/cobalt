@@ -19,11 +19,14 @@
 #include <string>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #if COBALT_MEDIA_ENABLE_STARTUP_LATENCY_TRACKING
@@ -33,6 +36,7 @@
 #include "cobalt/media/base/format_support_query_metrics.h"
 #endif  // COBALT_MEDIA_ENABLE_FORMAT_SUPPORT_QUERY_METRICS
 #include "media/starboard/starboard_utils.h"
+#include "content/public/common/content_switches.h"
 #include "starboard/common/media.h"
 #include "starboard/common/once.h"
 #include "starboard/common/player.h"
@@ -361,6 +365,25 @@ void SbPlayerBridge::WriteBuffers(
 #if SB_HAS(PLAYER_WITH_URL)
   DCHECK(!is_url_based_);
 #endif  // SB_HAS(PLAYER_WITH_URL)
+
+  // [ABHIJEET][PUNCH-OUT] SbPlayerBridge::WriteBuffers - BRIDGE TO SBPLAYER
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  std::string stream_type = (type == DemuxerStream::AUDIO) ? "AUDIO" : "VIDEO";
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SbPlayerBridge::WriteBuffers - BRIDGE TO SBPLAYER API"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Stream Type: " << stream_type
+            << " | Buffer Count: " << buffers.size()
+            << " | Output Mode: " << static_cast<int>(output_mode_)
+            << " | PURPOSE: Bridge layer converting Chromium DecoderBuffers to SbPlayer samples";
 
 #if COBALT_MEDIA_ENABLE_SUSPEND_RESUME
   if (allow_resume_after_suspend_) {
@@ -983,17 +1006,43 @@ void SbPlayerBridge::WriteBuffersInternal(
   }
 
   if (!gathered_sbplayer_sample_infos.empty()) {
+    // [ABHIJEET][PUNCH-OUT] CRITICAL: Final data transfer to SbPlayer platform API
+    std::string process_name = "unknown";
+    auto* cmd = base::CommandLine::ForCurrentProcess();
+    if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+      process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+    }
+    base::ProcessId pid = base::GetCurrentProcId();
+    
+    std::string stream_type_str = (sample_type == kSbMediaTypeAudio) ? "AUDIO" : "VIDEO";
+    
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SbPlayerBridge::WriteBuffersInternal - CALLING SBPLAYER WRITSAMPLES"
+              << " | Process: " << process_name << " | PID: " << pid
+              << " | Thread: " << base::PlatformThread::GetName()
+              << " | Stream Type: " << stream_type_str
+              << " | Sample Count: " << gathered_sbplayer_sample_infos.size()
+              << " | SbPlayer: " << (SbPlayerIsValid(player_) ? "VALID" : "INVALID")
+              << " | PURPOSE: FINAL DATA TRANSFER - Raw media samples to hardware player";
+              
 #if COBALT_MEDIA_ENABLE_CVAL
     cval_stats_->StartTimer(MediaTiming::SbPlayerWriteSamples,
                             pipeline_identifier_);
 #endif  // COBALT_MEDIA_ENABLE_CVAL
+
+    // CRITICAL: This is where Chromium media data finally reaches the SbPlayer platform
     sbplayer_interface_->WriteSamples(player_, sample_type,
                                       gathered_sbplayer_sample_infos.data(),
                                       gathered_sbplayer_sample_infos.size());
+                                      
 #if COBALT_MEDIA_ENABLE_CVAL
     cval_stats_->StopTimer(MediaTiming::SbPlayerWriteSamples,
                            pipeline_identifier_);
 #endif  // COBALT_MEDIA_ENABLE_CVAL
+
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] SbPlayerBridge::WriteBuffersInternal - SBPLAYER WRITSAMPLES COMPLETE"
+              << " | Samples written to hardware player"
+              << " | SbPlayer will decode and render " << stream_type_str << " data"
+              << " | PURPOSE: Media data now in platform's hands for hardware rendering";
   }
 }
 

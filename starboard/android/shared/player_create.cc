@@ -188,16 +188,31 @@ SbPlayer SbPlayerCreate(SbWindow /*window*/,
       // SbPlayer will properly handle this by reporting error in VideoDecoder,
       // when it fails to acquire the surface.
       video_codec != kSbMediaVideoCodecNone) {
+    
+    // [ABHIJEET][PUNCH-OUT] CRITICAL ARCHITECTURE LIMITATION:
+    // Android TV has exactly ONE hardware video surface for punch-out mode.
+    // This is a fundamental Android platform constraint - only one video
+    // can use hardware overlay at a time.
+    //
+    // BEHAVIOR:
+    // - Main player (primary video): Gets hardware punch-out surface
+    // - Sub players (secondary videos): MUST use decode-to-texture mode
+    // - If main player exists, new punch-out requests will FAIL
+    //
     // Check the availability of the video window. As we only support one main
     // player, and sub players are in decode to texture mode on Android, a
     // single video window should be enough.
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] Checking video surface availability for punch-out mode";
+    
     if (!starboard::android::shared::VideoSurfaceHolder::
             IsVideoSurfaceAvailable()) {
-      SB_LOG(ERROR) << "Video surface is not available now.";
+      SB_LOG(ERROR) << "[ABHIJEET][PUNCH-OUT] Video surface NOT available - only ONE punch-out player allowed at a time";
       player_error_func(kSbPlayerInvalid, context, kSbPlayerErrorDecode,
                         "Video surface is not available now");
       return kSbPlayerInvalid;
     }
+    
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] Video surface available - will create punch-out player";
   }
 
   std::unique_ptr<PlayerWorker::Handler> handler(

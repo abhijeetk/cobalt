@@ -44,7 +44,21 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 
-/** A wrapper of the MediaCodec class. */
+/** 
+ * [ABHIJEET][PUNCH-OUT] HARDWARE DECODER WRAPPER:
+ * 
+ * This class is the bridge between Starboard C++ code and Android's MediaCodec API.
+ * It's responsible for configuring hardware video decoders for both punch-out 
+ * and decode-to-texture modes.
+ * 
+ * KEY HARDWARE OVERLAY RESPONSIBILITIES:
+ * 1. Configures MediaCodec with the hardware Surface for punch-out mode
+ * 2. Sets up hardware decoder with proper resolution limits
+ * 3. Manages tunnel mode for hardware audio/video synchronization
+ * 4. Handles hardware decoder lifecycle and error recovery
+ * 
+ * A wrapper of the MediaCodec class. 
+ */
 @JNINamespace("starboard::android::shared")
 class MediaCodecBridge {
   // After a flush(), dequeueOutputBuffer() can often produce empty presentation timestamps
@@ -816,9 +830,25 @@ class MediaCodecBridge {
 
   @CalledByNative
   private void releaseOutputBufferAtTimestamp(int index, long renderTimestampNs) {
+    // [ABHIJEET][PUNCH-OUT] CRITICAL: FINAL STEP - JAVA SIDE HARDWARE RENDERING
+    Log.i(TAG, "[ABHIJEET][PUNCH-OUT] MediaCodecBridge.releaseOutputBufferAtTimestamp - FINAL HARDWARE RENDERING CALL"
+              + " | Buffer Index: " + index
+              + " | Render Timestamp: " + renderTimestampNs + " ns"
+              + " | MediaCodec: " + (mMediaCodec.get() != null ? "ACTIVE" : "NULL")
+              + " | PURPOSE: This triggers Android MediaCodec to render decoded frame to configured Surface"
+              + " | HARDWARE PATH: Android MediaCodec → Surface → SurfaceView → Hardware Overlay");
+              
     try {
+      // THIS IS THE ACTUAL HARDWARE RENDERING CALL - Android MediaCodec renders to Surface
       mMediaCodec.get().releaseOutputBuffer(index, renderTimestampNs);
+      
+      Log.i(TAG, "[ABHIJEET][PUNCH-OUT] MediaCodecBridge.releaseOutputBufferAtTimestamp - FRAME RENDERED TO SURFACE"
+                + " | Buffer Index: " + index + " successfully rendered to Android Surface"
+                + " | RESULT: Decoded video frame is now painted on hardware overlay"
+                + " | FINAL STEP: Hardware compositor will display this frame");
+                
     } catch (IllegalStateException e) {
+      Log.e(TAG, "[ABHIJEET][PUNCH-OUT] HARDWARE RENDERING FAILED - MediaCodec error", e);
       // TODO: May need to report the error to the caller. crbug.com/356498.
       Log.e(TAG, "Failed to release output buffer", e);
     }
@@ -849,7 +879,21 @@ class MediaCodecBridge {
       }
 
       maybeSetMaxVideoInputSize(format);
+      
+      // [ABHIJEET][PUNCH-OUT] CRITICAL: SURFACE CONFIGURATION - CONNECTING DECODER TO HARDWARE OVERLAY
+      Log.i(TAG, "[ABHIJEET][PUNCH-OUT] MediaCodecBridge.configure - CONNECTING DECODER TO SURFACE"
+                + " | Surface: " + (surface != null ? "PROVIDED" : "NULL")
+                + " | MediaCodec: " + (mMediaCodec.get() != null ? "READY" : "NULL")
+                + " | PURPOSE: Configuring MediaCodec to output directly to hardware Surface"
+                + " | RESULT: All decoded frames will render to this Surface automatically");
+      
       mMediaCodec.get().configure(format, surface, crypto, flags);
+      
+      Log.i(TAG, "[ABHIJEET][PUNCH-OUT] MediaCodecBridge.configure - DECODER CONFIGURED FOR HARDWARE RENDERING"
+                + " | Configuration: SUCCESS"
+                + " | Surface Connection: ESTABLISHED"
+                + " | RESULT: MediaCodec will now output all decoded frames directly to hardware overlay");
+      
       mFrameRateEstimator = new FrameRateEstimator();
       return true;
     } catch (IllegalArgumentException e) {

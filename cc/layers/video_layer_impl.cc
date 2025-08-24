@@ -10,8 +10,12 @@
 #include <utility>
 
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "cc/base/features.h"
 #include "cc/layers/video_frame_provider_client_impl.h"
 #include "cc/trees/layer_tree_frame_sink.h"
@@ -21,6 +25,7 @@
 #include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
+#include "content/public/common/content_switches.h"
 #include "media/base/video_frame.h"
 #include "media/renderers/video_resource_updater.h"
 #include "ui/gfx/color_space.h"
@@ -129,6 +134,24 @@ void VideoLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
                                  AppendQuadsData* append_quads_data) {
   DCHECK(frame_);
 
+  // [ABHIJEET][PUNCH-OUT] VideoLayerImpl::AppendQuads - CONVERTING VIDEOFRAME TO DRAW QUADS
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoLayerImpl::AppendQuads - CONVERTING VIDEOFRAME TO DRAW QUADS"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Layer ID: " << id()
+            << " | VideoFrame: " << (frame_ ? "VALID" : "NULL")
+            << " | Format: " << (frame_ ? static_cast<int>(frame_->format()) : -1)
+            << " | Size: " << (frame_ ? frame_->natural_size().ToString() : "NULL")
+            << " | PURPOSE: Converting VideoFrame to compositor draw quads (TextureDrawQuad/YUVVideoDrawQuad/etc)";
+
   gfx::Transform transform = DrawTransform();
 
   // bounds() is in post-rotation space so quad rect in content space must be
@@ -176,10 +199,20 @@ void VideoLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
   if (is_clipped()) {
     clip_rect_opt = clip_rect();
   }
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoLayerImpl::AppendQuads - CALLING UPDATER TO CREATE DRAW QUADS"
+            << " | Quad Rect: " << quad_rect.ToString()
+            << " | Visible Quad Rect: " << visible_quad_rect.ToString()
+            << " | Transform: " << transform.ToString()
+            << " | PURPOSE: VideoResourceUpdater will create TextureDrawQuad/YUVVideoDrawQuad for compositor";
+            
   updater_->AppendQuads(render_pass, frame_, transform, quad_rect,
                         visible_quad_rect, draw_properties().mask_filter_info,
                         clip_rect_opt, contents_opaque(), draw_opacity(),
                         GetSortingContextId());
+                        
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoLayerImpl::AppendQuads - DRAW QUADS ADDED TO RENDER PASS"
+            << " | VideoFrame converted to compositor draw quads"
+            << " | PURPOSE: Compositor now has quads that will be processed by OverlayStrategyUnderlayStarboard";
 }
 
 void VideoLayerImpl::DidDraw(viz::ClientResourceProvider* resource_provider) {
@@ -214,7 +247,28 @@ gfx::ContentColorUsage VideoLayerImpl::GetContentColorUsage() const {
 }
 
 void VideoLayerImpl::SetNeedsRedraw() {
+  // [ABHIJEET][PUNCH-OUT] VideoLayerImpl::SetNeedsRedraw - VIDEO LAYER TRIGGERS COMPOSITOR REDRAW
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd && cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  base::ProcessId pid = base::GetCurrentProcId();
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoLayerImpl::SetNeedsRedraw - TRIGGERING COMPOSITOR REDRAW"
+            << " | Process: " << process_name << " | PID: " << pid
+            << " | Thread ID: [" << base::PlatformThread::CurrentId() << "]"
+            << " | Thread Name: " << base::PlatformThread::GetName()
+            << " | Layer ID: " << id()
+            << " | Bounds: " << bounds().ToString()
+            << " | PURPOSE: Video layer requesting compositor redraw - leads to AppendQuads() call";
+  
   UnionUpdateRect(gfx::Rect(bounds()));
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoLayerImpl::SetNeedsRedraw - CALLING LAYER TREE REDRAW"
+            << " | Calling layer_tree_impl()->SetNeedsRedraw()"
+            << " | PURPOSE: Tell compositor tree to schedule redraw which will call AppendQuads()";
+            
   layer_tree_impl()->SetNeedsRedraw();
 }
 

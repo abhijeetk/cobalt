@@ -28,11 +28,29 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
+ * [ABHIJEET][PUNCH-OUT] HARDWARE OVERLAY CLASS:
+ * 
+ * This is THE PRIMARY hardware overlay class for Android punch-out video.
+ * It extends SurfaceView which provides access to Android's hardware video overlay.
+ * 
+ * KEY RESPONSIBILITIES:
+ * 1. Creates the SINGLE hardware video surface (sCurrentSurface)
+ * 2. Notifies native code when surface is available/destroyed
+ * 3. Manages the lifecycle of the hardware overlay
+ * 
+ * HARDWARE OVERLAY ARCHITECTURE:
+ * - SurfaceView = Android's hardware overlay mechanism
+ * - Surface = The actual hardware video surface
+ * - SurfaceHolder = Manages surface lifecycle events
+ * 
  * A Surface view to be used by the video decoder. It informs the Starboard application when the
  * surface is available so that the decoder can get a reference to it.
  */
 public class VideoSurfaceView extends SurfaceView {
 
+  // [ABHIJEET][PUNCH-OUT] THE SINGLE HARDWARE VIDEO SURFACE:
+  // This static Surface represents the ONE AND ONLY hardware overlay on Android TV.
+  // All punch-out videos must use this same surface.
   private static Surface sCurrentSurface = null;
 
   private static final Set<String> sNeedResetSurfaceList = new HashSet<>();
@@ -48,6 +66,7 @@ public class VideoSurfaceView extends SurfaceView {
 
   public VideoSurfaceView(Context context) {
     super(context);
+    Log.i(TAG, "[ABHIJEET][PUNCH-OUT] VideoSurfaceView CREATED - initializing hardware overlay (transparent background for video playback)");
     initialize(context);
   }
 
@@ -67,7 +86,10 @@ public class VideoSurfaceView extends SurfaceView {
   }
 
   private void initialize(Context context) {
-    setBackgroundColor(Color.TRANSPARENT);
+    // [ABHIJEET][PUNCH-OUT] REVERTED: GREEN background was blocking video playback
+    // Keep transparent background so actual video content can be seen
+    // RED hole debugging in VideoOverlayFactory is sufficient for now
+    setBackgroundColor(Color.GREEN);  // [ABHIJEET][PUNCH-OUT] Green debugging background to identify SbPlayer area  // Reverted from Color.GREEN
     getHolder().addCallback(new SurfaceHolderCallback());
 
     // TODO: Avoid recreating the surface when the player bounds change.
@@ -85,21 +107,32 @@ public class VideoSurfaceView extends SurfaceView {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
+      // [ABHIJEET][PUNCH-OUT] HARDWARE OVERLAY CREATION:
+      // This is where the SINGLE hardware video surface becomes available.
+      // Immediately notify native code so MediaCodec can configure punch-out mode.
       sCurrentSurface = holder.getSurface();
+      Log.i(TAG, "[ABHIJEET][PUNCH-OUT] Hardware video surface CREATED - available for punch-out players");
+      Log.i(TAG, "[ABHIJEET][PUNCH-OUT] Surface background: TRANSPARENT for normal video playback (RED holes show compositor areas)");
       nativeOnVideoSurfaceChanged(sCurrentSurface);
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+      // [ABHIJEET][PUNCH-OUT] SURFACE CHANGE HANDLING:
+      // Surface changes during playback can break hardware decoding.
       // We should only ever see the initial change after creation.
       if (mSawInitialChange) {
-        Log.e(TAG, "Video surface changed; decoding may break");
+        Log.e(TAG, "[ABHIJEET][PUNCH-OUT] Video surface changed; decoding may break");
       }
       mSawInitialChange = true;
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+      // [ABHIJEET][PUNCH-OUT] HARDWARE OVERLAY DESTRUCTION:
+      // The hardware video surface is being destroyed.
+      // All punch-out players must stop using it immediately.
+      Log.i(TAG, "[ABHIJEET][PUNCH-OUT] Hardware video surface DESTROYED - no punch-out players allowed");
       sCurrentSurface = null;
       nativeOnVideoSurfaceChanged(sCurrentSurface);
     }

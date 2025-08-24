@@ -1,2 +1,2 @@
 target_os = "android"
-target_cpu = "arm64"
+target_cpu = "x86"

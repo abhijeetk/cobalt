@@ -66,17 +66,25 @@ SbPlayerOutputMode SbPlayerGetPreferredOutputMode(
   }
 
   if (max_video_capabilities && strlen(max_video_capabilities) > 0) {
+    // [ABHIJEET][DTT] SUB PLAYER DETECTION:
+    // If max_video_capabilities is set, this is a SUB PLAYER (secondary video).
+    // Sub players MUST use decode-to-texture because there's only ONE hardware
+    // video surface available for punch-out mode.
+    
+    SB_LOG(INFO) << "[ABHIJEET][DTT] Sub player detected (max_video_capabilities='" 
+                 << max_video_capabilities << "') - FORCING decode-to-texture mode";
+    
     // Sub players must use "decode-to-texture" on Android.
     // Since hdr videos are not supported under "decode-to-texture" mode, reject
     // it for sub players.
     if (PlayerComponents::Factory::OutputModeSupported(
             kSbPlayerOutputModeDecodeToTexture, codec, drm_system) &&
         is_sdr) {
+      SB_LOG(INFO) << "[ABHIJEET][DTT] Sub player will use decode-to-texture mode";
       return kSbPlayerOutputModeDecodeToTexture;
     }
     SB_LOG_IF(INFO, !is_sdr)
-        << "Returning kSbPlayerOutputModeInvalid as HDR videos are not "
-           "supported under decode-to-texture.";
+        << "[ABHIJEET][DTT] REJECTED: HDR videos not supported in decode-to-texture mode for sub players";
     return kSbPlayerOutputModeInvalid;
   }
 

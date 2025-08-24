@@ -133,23 +133,42 @@ MediaDecoder::MediaDecoder(
   SB_DCHECK(frame_rendered_cb_);
   SB_DCHECK(first_tunnel_frame_ready_cb_);
 
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaDecoder VIDEO Constructor - CREATING C++ WRAPPER AROUND ANDROID MEDIACODEC"
+               << " | Video Codec: " << video_codec
+               << " | Resolution Hint: " << width_hint << "x" << height_hint
+               << " | Max Resolution: " << max_width.value_or(-1) << "x" << max_height.value_or(-1)
+               << " | FPS: " << fps
+               << " | Surface: " << (j_output_surface ? "PROVIDED" : "NULL")
+               << " | Tunnel Mode: " << (tunnel_mode_enabled_ ? "ENABLED" : "DISABLED")
+               << " | PURPOSE: This C++ layer manages Android MediaCodec lifecycle and threading";
+
   jobject j_media_crypto = drm_system_ ? drm_system_->GetMediaCrypto() : NULL;
   const bool require_secured_decoder =
       drm_system_ && drm_system_->require_secured_decoder();
   SB_DCHECK(!drm_system_ || j_media_crypto);
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaDecoder - CREATING MEDIACODEC BRIDGE (JNI LAYER)"
+               << " | Surface Parameter: " << (j_output_surface ? "VALID_SURFACE" : "NULL_SURFACE")
+               << " | PURPOSE: This creates the JNI bridge to Java MediaCodec and configures it with the Surface";
+
   media_codec_bridge_ = MediaCodecBridge::CreateVideoMediaCodecBridge(
       video_codec, width_hint, height_hint, fps, max_width, max_height, this,
       j_output_surface, j_media_crypto, color_metadata, require_secured_decoder,
       require_software_codec, tunnel_mode_audio_session_id,
       force_big_endian_hdr_metadata, max_video_input_size, error_message);
   if (!media_codec_bridge_) {
-    SB_LOG(ERROR) << "Failed to create video media codec bridge with error: "
-                  << *error_message;
+    SB_LOG(ERROR) << "[ABHIJEET][PUNCH-OUT] MediaDecoder - FAILED TO CREATE MEDIACODEC BRIDGE: " << *error_message;
+  } else {
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaDecoder - MEDIACODEC BRIDGE CREATED SUCCESSFULLY"
+                 << " | PURPOSE: C++ MediaDecoder now controls Android MediaCodec through JNI bridge";
   }
 }
 
 MediaDecoder::~MediaDecoder() {
   SB_DCHECK(thread_checker_.CalledOnValidThread());
+
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaDecoder Destructor - DESTROYING C++ WRAPPER LAYER"
+               << " | Media Type: " << (media_type_ == kSbMediaTypeVideo ? "VIDEO" : "AUDIO")
+               << " | Purpose: Cleaning up C++ wrapper around Android MediaCodec";
 
   TerminateDecoderThread();
 
@@ -661,6 +680,16 @@ void MediaDecoder::OnMediaCodecOutputBufferAvailable(
   SB_DCHECK(media_codec_bridge_);
   SB_DCHECK_GE(buffer_index, 0);
 
+  if (media_type_ == kSbMediaTypeVideo) {
+    SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaDecoder::OnMediaCodecOutputBufferAvailable - DECODED VIDEO FRAME READY"
+                 << " | Buffer Index: " << buffer_index
+                 << " | Presentation Time: " << presentation_time_us << " us"
+                 << " | Buffer Size: " << size << " bytes"
+                 << " | Flags: 0x" << std::hex << flags << std::dec
+                 << " | PURPOSE: Android MediaCodec has decoded a video frame and it's ready for rendering"
+                 << " | NEXT STEP: This buffer will be processed by VideoDecoder host";
+  }
+
   // TODO(b/291959069): After |decoder_thread_| is destroyed, it may still
   // receive output buffer, discard this invalid output buffer.
   if (destroying_.load() || !decoder_thread_) {
@@ -695,6 +724,10 @@ void MediaDecoder::OnMediaCodecOutputFormatChanged() {
 }
 
 void MediaDecoder::OnMediaCodecFrameRendered(int64_t frame_timestamp) {
+  SB_LOG(INFO) << "[ABHIJEET][PUNCH-OUT] MediaDecoder::OnMediaCodecFrameRendered - VIDEO FRAME ACTUALLY RENDERED TO HARDWARE"
+               << " | Frame Timestamp: " << frame_timestamp << " us"
+               << " | PURPOSE: Android MediaCodec has successfully rendered the frame to the hardware Surface"
+               << " | CRITICAL: This confirms the frame is now visible on the display";
   frame_rendered_cb_(frame_timestamp);
 }
 

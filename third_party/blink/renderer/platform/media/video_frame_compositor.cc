@@ -8,9 +8,11 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -236,17 +238,43 @@ void VideoFrameCompositor::Stop() {
 void VideoFrameCompositor::PaintSingleFrame(
     scoped_refptr<media::VideoFrame> frame,
     bool repaint_duplicate_frame) {
+  // [ABHIJEET][PUNCH-OUT] VideoFrameCompositor::PaintSingleFrame - VIDEO FRAME RECEIVED BY COMPOSITOR
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::PaintSingleFrame - COMPOSITOR RECEIVES VIDEOFRAME"
+            << " | Thread: " << base::PlatformThread::GetName() 
+            << " | VideoFrame: " << (frame ? "VALID" : "NULL")
+            << " | Format: " << (frame ? static_cast<int>(frame->format()) : -1)
+            << " | Size: " << (frame ? frame->natural_size().ToString() : "NULL")
+            << " | Repaint: " << (repaint_duplicate_frame ? "YES" : "NO")
+            << " | Purpose: VideoFrameCompositor processing VideoFrame for client forwarding";
+            
   if (!task_runner_->BelongsToCurrentThread()) {
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::PaintSingleFrame - CROSS-THREAD FORWARDING"
+              << " | Current Thread: " << base::PlatformThread::GetName()
+              << " | Target Thread: Compositor Thread"
+              << " | Purpose: Forwarding VideoFrame to correct compositor thread";
     task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&VideoFrameCompositor::PaintSingleFrame,
                                   weak_ptr_factory_.GetWeakPtr(),
                                   std::move(frame), repaint_duplicate_frame));
     return;
   }
+  
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::PaintSingleFrame - PROCESSING ON COMPOSITOR THREAD"
+            << " | Thread: " << base::PlatformThread::GetName()
+            << " | About to call ProcessNewFrame()";
+            
   if (ProcessNewFrame(std::move(frame), tick_clock_->NowTicks(),
                       repaint_duplicate_frame) &&
       IsClientSinkAvailable()) {
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::PaintSingleFrame - FORWARDING TO CLIENT"
+              << " | Client Available: YES"
+              << " | Calling client_->DidReceiveFrame()"
+              << " | Purpose: Notifying video client about new frame availability";
     client_->DidReceiveFrame();
+  } else {
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::PaintSingleFrame - NOT FORWARDING TO CLIENT"
+              << " | ProcessNewFrame Success: " << (ProcessNewFrame(frame, tick_clock_->NowTicks(), repaint_duplicate_frame) ? "YES" : "NO")
+              << " | Client Available: " << (IsClientSinkAvailable() ? "YES" : "NO");
   }
 }
 
@@ -360,8 +388,21 @@ bool VideoFrameCompositor::ProcessNewFrame(
     bool repaint_duplicate_frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
+  // [ABHIJEET][PUNCH-OUT] VideoFrameCompositor::ProcessNewFrame - PROCESSING VIDEOFRAME FOR CURRENT DISPLAY
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::ProcessNewFrame - FRAME PROCESSING"
+            << " | Thread: " << base::PlatformThread::GetName()
+            << " | VideoFrame: " << (frame ? "VALID" : "NULL")
+            << " | Format: " << (frame ? static_cast<int>(frame->format()) : -1)
+            << " | Unique ID: " << (frame ? frame->unique_id().GetUnsafeValue() : 0)
+            << " | Current Frame: " << (GetCurrentFrame() ? "EXISTS" : "NULL")
+            << " | Repaint Duplicate: " << (repaint_duplicate_frame ? "YES" : "NO")
+            << " | PURPOSE: Processing new VideoFrame and setting as current frame";
+
   if (!frame || (GetCurrentFrame() && !repaint_duplicate_frame &&
                  frame->unique_id() == GetCurrentFrame()->unique_id())) {
+    LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::ProcessNewFrame - FRAME REJECTED"
+              << " | Reason: " << (!frame ? "NULL_FRAME" : "DUPLICATE_FRAME")
+              << " | PURPOSE: Frame not processed - no update needed";
     return false;
   }
 
@@ -384,6 +425,11 @@ bool VideoFrameCompositor::ProcessNewFrame(
   if (frame_presented_cb) {
     std::move(frame_presented_cb).Run();
   }
+
+  LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoFrameCompositor::ProcessNewFrame - FRAME PROCESSED SUCCESSFULLY"
+            << " | VideoFrame set as current frame"
+            << " | rendered_last_frame_ = false (needs rendering)"
+            << " | PURPOSE: VideoFrame is now current frame, ready for compositor to display";
 
   return true;
 }

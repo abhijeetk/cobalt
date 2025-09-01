@@ -780,6 +780,8 @@ void StarboardRenderer::CreatePlayerBridge() {
         LOG(INFO) << "[MODE SETTING] FINAL: Setting StarboardRenderingMode::kPunchOut"
                   << " | This will ENABLE punch-out mode with hardware video overlay"
                   << " | Expected: Video holes created, hardware surface rendering";
+        CHECK(false);
+        //SB_CHECK(false);
         update_starboard_rendering_mode_cb_.Run(
             StarboardRenderingMode::kPunchOut);
         break;

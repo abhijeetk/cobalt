@@ -720,6 +720,8 @@ void VideoResourceUpdater::AppendQuads(
 
   switch (frame_resource_type_) {
     case VideoFrameResourceType::VIDEO_HOLE: {
+      //SB_CHECK(false);
+      CHECK(false);
       // [ABHIJEET][PUNCH-OUT] CRITICAL: VideoResourceUpdater creating VideoHoleDrawQuad
       LOG(INFO) << "[ABHIJEET][PUNCH-OUT] VideoResourceUpdater::AppendQuads - CREATING VIDEOHOLEDRAWQUAD"
                 << " | Process: " << process_name << " | PID: " << pid

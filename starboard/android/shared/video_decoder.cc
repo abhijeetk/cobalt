@@ -437,6 +437,8 @@ VideoDecoder::VideoDecoder(const VideoStreamInfo& video_stream_info,
                     << " | Root cause: Provider not passed correctly from upper layers";
     }
   } else {
+    //SB_CHECK(false);
+    CHECK(false);
     SB_LOG(INFO) << "[DTT-DEBUG] PUNCH-OUT MODE - graphics context provider not needed for this mode";
   }
 

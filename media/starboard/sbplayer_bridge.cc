@@ -172,7 +172,7 @@ SbPlayerBridge::SbPlayerBridge(
     SbPlayerOutputMode default_output_mode,
     const OnEncryptedMediaInitDataEncounteredCB&
         on_encrypted_media_init_data_encountered_cb,
-    DecodeTargetProvider* const decode_target_provider,
+    cobalt::media::DecodeTargetProvider* const decode_target_provider,
     std::string pipeline_identifier)
     : url_(url),
       sbplayer_interface_(interface),
@@ -223,7 +223,7 @@ SbPlayerBridge::SbPlayerBridge(
     bool allow_resume_after_suspend,
     SbPlayerOutputMode default_output_mode,
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-    DecodeTargetProvider* const decode_target_provider,
+    cobalt::media::DecodeTargetProvider* const decode_target_provider,
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
     const std::string& max_video_capabilities,
     int max_video_input_size
@@ -304,7 +304,7 @@ SbPlayerBridge::~SbPlayerBridge() {
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
   decode_target_provider_->SetOutputMode(
-      DecodeTargetProvider::kOutputModeInvalid);
+      cobalt::media::DecodeTargetProvider::kOutputModeInvalid);
   decode_target_provider_->ResetGetCurrentSbDecodeTargetFunction();
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
@@ -630,7 +630,7 @@ void SbPlayerBridge::Suspend() {
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
   decode_target_provider_->SetOutputMode(
-      DecodeTargetProvider::kOutputModeInvalid);
+      cobalt::media::DecodeTargetProvider::kOutputModeInvalid);
   decode_target_provider_->ResetGetCurrentSbDecodeTargetFunction();
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
@@ -683,19 +683,19 @@ void SbPlayerBridge::Resume(SbWindow window) {
 
 namespace {
 
-DecodeTargetProvider::OutputMode ToVideoFrameProviderOutputMode(
+cobalt::media::DecodeTargetProvider::OutputMode ToVideoFrameProviderOutputMode(
     SbPlayerOutputMode output_mode) {
   switch (output_mode) {
     case kSbPlayerOutputModeDecodeToTexture:
-      return DecodeTargetProvider::kOutputModeDecodeToTexture;
+      return cobalt::media::DecodeTargetProvider::kOutputModeDecodeToTexture;
     case kSbPlayerOutputModePunchOut:
-      return DecodeTargetProvider::kOutputModePunchOut;
+      return cobalt::media::DecodeTargetProvider::kOutputModePunchOut;
     case kSbPlayerOutputModeInvalid:
-      return DecodeTargetProvider::kOutputModeInvalid;
+      return cobalt::media::DecodeTargetProvider::kOutputModeInvalid;
   }
 
   NOTREACHED();
-  return DecodeTargetProvider::kOutputModeInvalid;
+  return cobalt::media::DecodeTargetProvider::kOutputModeInvalid;
 }
 
 }  // namespace
@@ -741,7 +741,7 @@ void SbPlayerBridge::CreateUrlPlayer(const std::string& url) {
   if (output_mode_ == kSbPlayerOutputModeDecodeToTexture) {
     // If the player is setup to decode to texture, then provide Cobalt with
     // a method of querying that texture.
-    decode_target_provider_->SetGetCurrentSbDecodeTargetFunction(base::Bind(
+    decode_target_provider_->SetGetCurrentSbDecodeTargetFunction(base::BindRepeating(
         &SbPlayerBridge::GetCurrentSbDecodeTarget, base::Unretained(this)));
     LOG(INFO) << "Playing in decode-to-texture mode.";
   } else {
@@ -839,7 +839,7 @@ void SbPlayerBridge::CreatePlayer() {
     // If the player is setup to decode to texture, then provide Cobalt with
     // a method of querying that texture.
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-    decode_target_provider_->SetGetCurrentSbDecodeTargetFunction(base::Bind(
+    decode_target_provider_->SetGetCurrentSbDecodeTargetFunction(base::BindRepeating(
         &SbPlayerBridge::GetCurrentSbDecodeTarget, base::Unretained(this)));
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
     LOG(INFO) << "Playing in decode-to-texture mode.";
@@ -1047,7 +1047,14 @@ void SbPlayerBridge::WriteBuffersInternal(
 }
 
 SbDecodeTarget SbPlayerBridge::GetCurrentSbDecodeTarget() {
-  return sbplayer_interface_->GetCurrentFrame(player_);
+  // Get decode target from platform implementation
+  SbDecodeTarget target = sbplayer_interface_->GetCurrentFrame(player_);
+  
+  LOG(INFO) << "[DTT-DEBUG] SbPlayerBridge::GetCurrentSbDecodeTarget returning platform target: " 
+            << target << " (valid: " << (target != kSbDecodeTargetInvalid ? "YES" : "NO") << ")"
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+            
+  return target;
 }
 
 SbPlayerOutputMode SbPlayerBridge::GetSbPlayerOutputMode() {
@@ -1121,7 +1128,7 @@ void SbPlayerBridge::ClearDecoderBufferCache() {
 
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&SbPlayerBridge::CallbackHelper::ClearDecoderBufferCache,
+      base::BindRepeating(&SbPlayerBridge::CallbackHelper::ClearDecoderBufferCache,
                  callback_helper_),
       TimeDelta::FromMilliseconds(kClearDecoderCacheIntervalInMilliseconds));
 #endif  // COBALT_MEDIA_ENABLE_SUSPEND_RESUME
@@ -1351,6 +1358,14 @@ SbPlayerOutputMode SbPlayerBridge::ComputeSbUrlPlayerOutputMode(
 
 SbPlayerOutputMode SbPlayerBridge::ComputeSbPlayerOutputMode(
     SbPlayerOutputMode default_output_mode) const {
+  // [MODE SETTING] LAYER 2: SbPlayerBridge decision logic - THIS IS WHERE THE CRITICAL DECISION HAPPENS
+  LOG(INFO) << "[MODE SETTING] LAYER 2: SbPlayerBridge::ComputeSbPlayerOutputMode CALLED"
+            << " | Input default_output_mode: " << GetPlayerOutputModeName(default_output_mode)
+            << " | Video Codec: " << video_stream_info_.codec
+            << " | MIME: " << (video_stream_info_.mime ? video_stream_info_.mime : "NULL")
+            << " | Max Video Capabilities: " << (video_stream_info_.max_video_capabilities ? video_stream_info_.max_video_capabilities : "NULL")
+            << " | PURPOSE: This function decides the FINAL output mode for the player";
+            
   SbPlayerCreationParam creation_param = {};
   creation_param.drm_system = drm_system_;
   creation_param.audio_stream_info = audio_stream_info_;
@@ -1370,6 +1385,11 @@ SbPlayerOutputMode SbPlayerBridge::ComputeSbPlayerOutputMode(
         strstr(video_stream_info_.max_video_capabilities,
                "decode-to-texture=true");
 
+    LOG(INFO) << "[MODE SETTING] LAYER 2: Checking decode-to-texture preference"
+              << " | MIME contains 'decode-to-texture=true': " << (strstr(video_stream_info_.mime, "decode-to-texture=true") ? "YES" : "NO")
+              << " | Max capabilities contains 'decode-to-texture=true': " << (strstr(video_stream_info_.max_video_capabilities, "decode-to-texture=true") ? "YES" : "NO")
+              << " | Overall decode-to-texture preferred: " << (is_decode_to_texture_preferred ? "YES" : "NO");
+
     if (is_decode_to_texture_preferred) {
       LOG(INFO) << "Setting `default_output_mode` from \""
                 << GetPlayerOutputModeName(default_output_mode) << "\" to \""
@@ -1382,9 +1402,17 @@ SbPlayerOutputMode SbPlayerBridge::ComputeSbPlayerOutputMode(
   }
 
   creation_param.output_mode = default_output_mode;
+  
+  LOG(INFO) << "[MODE SETTING] LAYER 2: About to call Starboard GetPreferredOutputMode"
+            << " | creation_param.output_mode: " << GetPlayerOutputModeName(creation_param.output_mode)
+            << " | Calling sbplayer_interface_->GetPreferredOutputMode()";
 
   auto output_mode =
       sbplayer_interface_->GetPreferredOutputMode(&creation_param);
+
+  LOG(INFO) << "[MODE SETTING] LAYER 2: Starboard GetPreferredOutputMode returned: " << GetPlayerOutputModeName(output_mode)
+            << " | FINAL DECISION: " << GetPlayerOutputModeName(output_mode) 
+            << " | This will be stored as output_mode_ in SbPlayerBridge";
 
   LOG(INFO) << "Output mode is set to " << GetPlayerOutputModeName(output_mode);
 

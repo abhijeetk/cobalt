@@ -66,7 +66,9 @@ SbPlayerOutputMode DefaultSbPlayerInterface::GetPreferredOutputMode(
     const SbPlayerCreationParam* creation_param) {
   media_metrics_provider_.StartTrackingAction(
       MediaAction::SBPLAYER_GET_PREFERRED_OUTPUT_MODE);
+  LOG(INFO) << "[MODE SETTING] LAYER 1: Chromium Media Interface calling SbPlayerGetPreferredOutputMode";
   auto output_mode = SbPlayerGetPreferredOutputMode(creation_param);
+  LOG(INFO) << "[MODE SETTING] LAYER 1: SbPlayerGetPreferredOutputMode returned: " << output_mode;
   media_metrics_provider_.EndTrackingAction(
       MediaAction::SBPLAYER_GET_PREFERRED_OUTPUT_MODE);
   return output_mode;

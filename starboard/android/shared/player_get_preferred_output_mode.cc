@@ -24,6 +24,19 @@ SbPlayerOutputMode SbPlayerGetPreferredOutputMode(
     const SbPlayerCreationParam* creation_param) {
   using starboard::shared::starboard::player::filter::PlayerComponents;
 
+  // [DTT-FORCE] HACK: Force ALL video to use decode-to-texture mode - UPDATED
+  SB_LOG(INFO) << "[MODE SETTING] LAYER 3: ANDROID-SPECIFIC implementation called";
+  SB_LOG(INFO) << "[DTT-FORCE] DEBUGGING creation_param: " << (creation_param ? "NOT NULL" : "NULL");
+  if (creation_param) {
+    SB_LOG(INFO) << "[DTT-FORCE] Video codec: " << creation_param->video_stream_info.codec;
+    SB_LOG(INFO) << "[DTT-FORCE] Audio codec: " << creation_param->audio_stream_info.codec;
+  }
+  SB_LOG(INFO) << "[DTT-FORCE] FORCING decode-to-texture mode for ALL video players - UPDATED";
+  if (creation_param && creation_param->video_stream_info.codec != kSbMediaVideoCodecNone) {
+    SB_LOG(INFO) << "[DTT-FORCE] Video detected - returning kSbPlayerOutputModeDecodeToTexture";
+    return kSbPlayerOutputModeDecodeToTexture;
+  }
+
   if (!creation_param) {
     SB_LOG(ERROR) << "creation_param cannot be NULL";
     return kSbPlayerOutputModeInvalid;

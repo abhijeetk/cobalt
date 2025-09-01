@@ -31,7 +31,11 @@
 #endif  // COBALT_MEDIA_ENABLE_CVAL
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+// ENHANCED: Using proper DecodeTargetProvider implementation from origin/25.lts.stable
+// Combined with FakeGraphicsContextProvider for comprehensive DTT testing
 #include "cobalt/media/base/decode_target_provider.h"
+// Also include FakeGraphicsContextProvider for testing infrastructure
+#include "starboard/testing/fake_graphics_context_provider.h"
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
 #if COBALT_MEDIA_ENABLE_SUSPEND_RESUME
@@ -111,7 +115,7 @@ class SbPlayerBridge {
                  bool allow_resume_after_suspend,
                  SbPlayerOutputMode default_output_mode,
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-                 DecodeTargetProvider* const decode_target_provider,
+                 cobalt::media::DecodeTargetProvider* const decode_target_provider,
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
                  const std::string& max_video_capabilities,
                  int max_video_input_size
@@ -340,7 +344,7 @@ class SbPlayerBridge {
   SbPlayerOutputMode output_mode_;
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-  DecodeTargetProvider* const decode_target_provider_;
+  cobalt::media::DecodeTargetProvider* const decode_target_provider_;
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
   // Keep copies of the mime type strings instead of using the ones in the

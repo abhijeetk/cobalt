@@ -417,6 +417,28 @@ VideoDecoder::VideoDecoder(const VideoStreamInfo& video_stream_info,
       has_new_texture_available_(false),
       number_of_preroll_frames_(kInitialPrerollFrameCount) {
   SB_DCHECK(error_message);
+  
+  // [DTT-DEBUG] VideoDecoder constructor - trace graphics context provider
+  SB_LOG(INFO) << "[DTT-DEBUG] VideoDecoder Constructor - PARAMETER ANALYSIS"
+               << " | Video Codec: " << static_cast<int>(video_stream_info.codec)
+               << " | Output Mode: " << static_cast<int>(output_mode)
+               << " | decode_target_graphics_context_provider parameter: " << (decode_target_graphics_context_provider ? "PROVIDED" : "NULL")
+               << " | decode_target_graphics_context_provider_ member: " << (decode_target_graphics_context_provider_ ? "SET" : "NULL")
+               << " | Max Video Capabilities: " << max_video_capabilities
+               << " | PURPOSE: Tracing graphics context provider setup for DTT mode";
+            
+  if (output_mode == kSbPlayerOutputModeDecodeToTexture) {
+    SB_LOG(INFO) << "[DTT-DEBUG] DECODE-TO-TEXTURE MODE REQUESTED"
+                 << " | Graphics context provider: " << (decode_target_graphics_context_provider_ ? "AVAILABLE" : "MISSING")
+                 << " | This is CRITICAL for DTT decoder initialization";
+    if (!decode_target_graphics_context_provider_) {
+      SB_LOG(ERROR) << "[DTT-DEBUG] CRITICAL: Graphics context provider is NULL for DTT mode"
+                    << " | This will cause DTT decoder initialization to FAIL"
+                    << " | Root cause: Provider not passed correctly from upper layers";
+    }
+  } else {
+    SB_LOG(INFO) << "[DTT-DEBUG] PUNCH-OUT MODE - graphics context provider not needed for this mode";
+  }
 
   if (force_secure_pipeline_under_tunnel_mode) {
     SB_DCHECK_NE(tunnel_mode_audio_session_id_, -1);
@@ -748,16 +770,45 @@ bool VideoDecoder::InitializeCodec(const VideoStreamInfo& video_stream_info,
       // actually allocate any memory into the texture at this time.  That is
       // done behind the scenes, the acquired texture is not actually backed
       // by texture data until updateTexImage() is called on it.
+      // [DTT-DEBUG] Check decode target graphics context provider for DTT mode
+      SB_LOG(INFO) << "[DTT-DEBUG] VideoDecoder::InitializeCodec - DECODE-TO-TEXTURE INITIALIZATION"
+                   << " | Output Mode: " << static_cast<int>(output_mode_)
+                   << " | decode_target_graphics_context_provider_: " << (decode_target_graphics_context_provider_ ? "VALID" : "NULL")
+                   << " | PURPOSE: Initializing DTT decoder - context provider is REQUIRED for DTT mode";
+      
       if (!decode_target_graphics_context_provider_) {
+        SB_LOG(ERROR) << "[DTT-DEBUG] CRITICAL ERROR: decode_target_graphics_context_provider_ is NULL"
+                      << " | Output Mode: " << static_cast<int>(output_mode_)
+                      << " | This means DTT decoder cannot initialize"
+                      << " | Root Cause: Graphics context provider not set correctly"
+                      << " | Result: DTT decoder will fail and system falls back to punch-out";
         *error_message = "Invalid decode target graphics context provider.";
         return false;
       }
+      
+      SB_LOG(INFO) << "[DTT-DEBUG] decode_target_graphics_context_provider_ is VALID"
+                   << " | Proceeding with DTT decoder initialization"
+                   << " | Creating DecodeTarget for SurfaceTexture";
+                
       DecodeTarget* decode_target =
           new DecodeTarget(decode_target_graphics_context_provider_);
+      
+      SB_LOG(INFO) << "[DTT-DEBUG] DecodeTarget created"
+                   << " | DecodeTarget valid: " << (SbDecodeTargetIsValid(decode_target) ? "YES" : "NO")
+                   << " | Purpose: SurfaceTexture for decode-to-texture rendering";
+                
       if (!SbDecodeTargetIsValid(decode_target)) {
+        SB_LOG(ERROR) << "[DTT-DEBUG] DECODE TARGET CREATION FAILED"
+                      << " | decode_target_graphics_context_provider_ was valid but DecodeTarget creation failed"
+                      << " | This indicates a deeper graphics context issue";
         *error_message = "Could not acquire a decode target from provider.";
         return false;
       }
+      
+      SB_LOG(INFO) << "[DTT-DEBUG] DECODE-TO-TEXTURE INITIALIZATION SUCCESS"
+                   << " | DecodeTarget created successfully"
+                   << " | SurfaceTexture ready for video frame updates"
+                   << " | DTT mode should work correctly now";
       j_output_surface = decode_target->surface();
 
       JNIEnv* env = base::android::AttachCurrentThread();

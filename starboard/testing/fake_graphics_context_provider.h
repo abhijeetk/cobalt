@@ -27,6 +27,13 @@
 #include "starboard/egl.h"
 #include "starboard/gles.h"
 
+// ENHANCED: Added includes for DTT testing borrowed from origin/25.lts.stable patterns
+#include "base/logging.h"
+#include "base/threading/platform_thread.h"
+#include "base/command_line.h"
+#include "base/synchronization/lock.h"
+#include "content/public/common/content_switches.h"
+
 namespace starboard {
 namespace testing {
 
@@ -47,6 +54,19 @@ class FakeGraphicsContextProvider {
   void ReleaseDecodeTarget(SbDecodeTarget decode_target);
 
   void Render();
+
+  // ENHANCED: Added DecodeTargetProvider testing support
+  // Borrowed from origin/25.lts.stable DecodeTargetProvider patterns
+  SbDecodeTarget CreateFakeDecodeTarget();
+  bool GetFakeDecodeTargetInfo(SbDecodeTarget decode_target, SbDecodeTargetInfo* out_info);
+  void ReleaseFakeDecodeTarget(SbDecodeTarget decode_target);
+
+  // Support for DecodeTargetProvider GetCurrentSbDecodeTarget function
+  SbDecodeTarget GetCurrentDecodeTarget();
+  void SetCurrentDecodeTarget(SbDecodeTarget decode_target);
+
+  // Enhanced logging support
+  void LogProcessAndThreadInfo(const std::string& operation) const;
 
  private:
   static void* ThreadEntryPoint(void* context);
@@ -74,6 +94,12 @@ class FakeGraphicsContextProvider {
   pthread_t decode_target_context_thread_;
 
   SbDecodeTargetGraphicsContextProvider decoder_target_provider_;
+
+  // ENHANCED: Added fake decode target management
+  // Borrowed from FakeDecodeTarget and DecodeTargetProvider patterns
+  mutable SbDecodeTarget current_fake_decode_target_;
+  mutable uint32_t fake_texture_counter_;
+  mutable base::Lock fake_decode_target_lock_;
 };
 
 }  // namespace testing

@@ -19,6 +19,13 @@
 
 #include "starboard/common/log.h"
 
+// ENHANCED: Added includes for comprehensive DTT logging
+// Borrowed from DecodeTargetProvider and CLAUDE.local.md patterns
+#include "base/logging.h"
+#include "base/threading/platform_thread.h"
+#include "base/command_line.h"
+#include "content/public/common/content_switches.h"
+
 #if defined(ADDRESS_SANITIZER)
 // By default, Leak Sanitizer and Address Sanitizer is expected to exist
 // together. However, this is not true for all platforms.
@@ -115,17 +122,41 @@ namespace testing {
 FakeGraphicsContextProvider::FakeGraphicsContextProvider()
     : display_(EGL_NO_DISPLAY),
       surface_(EGL_NO_SURFACE),
-      context_(EGL_NO_CONTEXT) {
+      context_(EGL_NO_CONTEXT),
+      current_fake_decode_target_(kSbDecodeTargetInvalid),
+      fake_texture_counter_(10000) {
+  // ENHANCED: Added comprehensive initialization logging
+  // Borrowed from DecodeTargetProvider patterns in origin/25.lts.stable
+  LogProcessAndThreadInfo("FakeGraphicsContextProvider creation");
+  
   InitializeEGL();
+  
+  LOG(INFO) << "[DTT-DEBUG] FakeGraphicsContextProvider fully initialized"
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
 }
 
 FakeGraphicsContextProvider::~FakeGraphicsContextProvider() {
+  // ENHANCED: Added cleanup logging borrowed from DecodeTargetProvider patterns
+  LogProcessAndThreadInfo("FakeGraphicsContextProvider destruction");
+  
+  // Clean up any remaining fake decode target
+  {
+    base::AutoLock auto_lock(fake_decode_target_lock_);
+    if (current_fake_decode_target_ != kSbDecodeTargetInvalid) {
+      LOG(INFO) << "[DTT-DEBUG] Cleaning up remaining fake decode target during destruction";
+      ReleaseFakeDecodeTarget(current_fake_decode_target_);
+    }
+  }
+  
   RunOnGlesContextThread(
       std::bind(&FakeGraphicsContextProvider::DestroyContext, this));
   functor_queue_.Wake();
   pthread_join(decode_target_context_thread_, NULL);
   EGL_CALL(eglDestroySurface(display_, surface_));
   EGL_CALL(eglTerminate(display_));
+  
+  LOG(INFO) << "[DTT-DEBUG] FakeGraphicsContextProvider destroyed"
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
 }
 
 void FakeGraphicsContextProvider::RunOnGlesContextThread(
@@ -369,6 +400,125 @@ void FakeGraphicsContextProvider::DecodeTargetGlesContextRunner(
           graphics_context_provider->gles_context_runner_context);
   provider->OnDecodeTargetGlesContextRunner(target_function,
                                             target_function_context);
+}
+
+// ENHANCED: Added DecodeTargetProvider integration methods
+// Borrowed from origin/25.lts.stable patterns and FakeDecodeTarget concepts
+SbDecodeTarget FakeGraphicsContextProvider::CreateFakeDecodeTarget() {
+  base::AutoLock auto_lock(fake_decode_target_lock_);
+  
+  LogProcessAndThreadInfo("CreateFakeDecodeTarget");
+  
+  // Create a fake decode target using the current texture counter
+  uint32_t texture_id = ++fake_texture_counter_;
+  
+  // Create a simple fake decode target structure
+  // In real implementation, this would be created by platform-specific video decoder
+  SbDecodeTarget fake_target = reinterpret_cast<SbDecodeTarget>(texture_id);
+  
+  LOG(INFO) << "[DTT-DEBUG] Created fake decode target: " << fake_target
+            << " with texture ID: " << texture_id
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+            
+  return fake_target;
+}
+
+bool FakeGraphicsContextProvider::GetFakeDecodeTargetInfo(
+    SbDecodeTarget decode_target, SbDecodeTargetInfo* out_info) {
+  
+  if (decode_target == kSbDecodeTargetInvalid || !out_info) {
+    LOG(WARNING) << "[DTT-DEBUG] GetFakeDecodeTargetInfo: Invalid parameters"
+                 << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+    return false;
+  }
+  
+  LogProcessAndThreadInfo("GetFakeDecodeTargetInfo");
+  
+  // Extract texture ID from fake decode target
+  uint32_t texture_id = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(decode_target));
+  
+  LOG(INFO) << "[DTT-DEBUG] GetFakeDecodeTargetInfo for target: " << decode_target
+            << " texture: " << texture_id
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+  
+  // Fill in fake decode target info - borrowed from FakeDecodeTarget patterns
+  out_info->format = kSbDecodeTargetFormat1PlaneRGBA;
+  out_info->is_opaque = true;
+  out_info->width = 1920;  // Fake 1080p resolution
+  out_info->height = 1080;
+  
+  // Simulate single plane RGBA texture
+  out_info->planes[kSbDecodeTargetPlaneRGBA].texture = texture_id;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].gl_texture_target = SB_GL_TEXTURE_2D;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].width = out_info->width;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].height = out_info->height;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].content_region.left = 0.0f;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].content_region.top = 0.0f;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].content_region.right = 1.0f;
+  out_info->planes[kSbDecodeTargetPlaneRGBA].content_region.bottom = 1.0f;
+  
+  return true;
+}
+
+void FakeGraphicsContextProvider::ReleaseFakeDecodeTarget(SbDecodeTarget decode_target) {
+  if (decode_target == kSbDecodeTargetInvalid) {
+    LOG(WARNING) << "[DTT-DEBUG] ReleaseFakeDecodeTarget: Invalid target"
+                 << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+    return;
+  }
+  
+  LogProcessAndThreadInfo("ReleaseFakeDecodeTarget");
+  
+  LOG(INFO) << "[DTT-DEBUG] ReleaseFakeDecodeTarget: " << decode_target
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+            
+  // In a real implementation, this would free the actual decode target resources
+  // For our fake implementation, we just log the release
+}
+
+SbDecodeTarget FakeGraphicsContextProvider::GetCurrentDecodeTarget() {
+  base::AutoLock auto_lock(fake_decode_target_lock_);
+  
+  LogProcessAndThreadInfo("GetCurrentDecodeTarget");
+  
+  if (current_fake_decode_target_ == kSbDecodeTargetInvalid) {
+    // Create a fake decode target if we don't have one
+    current_fake_decode_target_ = CreateFakeDecodeTarget();
+    LOG(INFO) << "[DTT-DEBUG] Created new current decode target: " 
+              << current_fake_decode_target_
+              << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+  }
+  
+  LOG(INFO) << "[DTT-DEBUG] GetCurrentDecodeTarget returning: " 
+            << current_fake_decode_target_
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+            
+  return current_fake_decode_target_;
+}
+
+void FakeGraphicsContextProvider::SetCurrentDecodeTarget(SbDecodeTarget decode_target) {
+  base::AutoLock auto_lock(fake_decode_target_lock_);
+  
+  LogProcessAndThreadInfo("SetCurrentDecodeTarget");
+  
+  LOG(INFO) << "[DTT-DEBUG] SetCurrentDecodeTarget from: " << current_fake_decode_target_
+            << " to: " << decode_target
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+            
+  current_fake_decode_target_ = decode_target;
+}
+
+void FakeGraphicsContextProvider::LogProcessAndThreadInfo(const std::string& operation) const {
+  // ENHANCED: Comprehensive logging borrowed from CLAUDE.local.md patterns
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  
+  LOG(INFO) << "[DTT-DEBUG] " << operation << " - Process: " << process_name
+            << " Thread ID: [" << base::PlatformThread::CurrentId() 
+            << "] Thread Name: " << base::PlatformThread::GetName();
 }
 
 }  // namespace testing

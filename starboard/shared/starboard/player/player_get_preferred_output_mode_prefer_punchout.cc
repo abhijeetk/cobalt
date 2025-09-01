@@ -23,6 +23,8 @@ SbPlayerOutputMode SbPlayerGetPreferredOutputMode(
     const SbPlayerCreationParam* creation_param) {
   using starboard::shared::starboard::player::filter::PlayerComponents;
 
+  SB_LOG(INFO) << "[MODE SETTING] LAYER 2: SHARED Starboard prefer_punchout implementation called - THIS MAY OVERRIDE ANDROID SPECIFIC!";
+
   if (!creation_param) {
     SB_LOG(ERROR) << "creation_param cannot be NULL";
     return kSbPlayerOutputModeInvalid;
@@ -67,15 +69,18 @@ SbPlayerOutputMode SbPlayerGetPreferredOutputMode(
 
   if (PlayerComponents::Factory::OutputModeSupported(output_modes_to_check[0],
                                                      codec, drm_system)) {
+    SB_LOG(INFO) << "[MODE SETTING] LAYER 2: SHARED prefer_punchout returning: " << output_modes_to_check[0];
     return output_modes_to_check[0];
   }
 
   if (PlayerComponents::Factory::OutputModeSupported(output_modes_to_check[1],
                                                      codec, drm_system)) {
+    SB_LOG(INFO) << "[MODE SETTING] LAYER 2: SHARED prefer_punchout returning: " << output_modes_to_check[1];
     return output_modes_to_check[1];
   }
 
   SB_LOG(WARNING) << "creation_param->video_stream_info.codec ("
                   << video_stream_info.codec << ") is not supported";
+  SB_LOG(INFO) << "[MODE SETTING] LAYER 2: SHARED prefer_punchout returning kSbPlayerOutputModeInvalid";
   return kSbPlayerOutputModeInvalid;
 }

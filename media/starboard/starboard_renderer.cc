@@ -26,6 +26,9 @@
 #include "media/base/video_codecs.h"
 #include "starboard/common/media.h"
 #include "starboard/common/player.h"
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+#include "starboard/testing/fake_graphics_context_provider.h"
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
 #if BUILDFLAG(IS_ANDROID)
 #include "media/base/android/android_overlay.h"
@@ -38,6 +41,7 @@ namespace {
 
 using ::starboard::GetMediaAudioConnectorName;
 using ::starboard::GetPlayerStateName;
+using ::starboard::GetPlayerOutputModeName;
 
 // In the OnNeedData(), it attempts to write one more audio access
 // unit than the audio write duration. Specifically, the check
@@ -144,6 +148,10 @@ StarboardRenderer::StarboardRenderer(
       ,
       android_overlay_factory_cb_(std::move(android_overlay_factory_cb))
 #endif  // BUILDFLAG(IS_ANDROID)
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+      ,
+      decode_target_provider_(new cobalt::media::DecodeTargetProvider())
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 {
   DCHECK(task_runner_);
   DCHECK(media_log_);
@@ -505,12 +513,30 @@ void StarboardRenderer::SetStarboardRendererCallbacks(
     RequestOverlayInfoCallBack request_overlay_info_cb
 #endif  // BUILDFLAG(IS_ANDROID)
 ) {
+  // [MODE SETTING] Logging callback setup - critical for DTT vs punch-out decision flow
+  std::string process_name = "unknown";
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(switches::kProcessType)) {
+    process_name = cmd->GetSwitchValueASCII(switches::kProcessType);
+  }
+  
+  LOG(INFO) << "[MODE SETTING] StarboardRenderer::SetStarboardRendererCallbacks CALLED"
+            << " | Process: " << process_name
+            << " | paint_video_hole_frame_cb is null: " << paint_video_hole_frame_cb.is_null()
+            << " | update_starboard_rendering_mode_cb is null: " << update_starboard_rendering_mode_cb.is_null()
+            << " | PURPOSE: Setting callbacks for video rendering mode decisions";
+  
   paint_video_hole_frame_cb_ = std::move(paint_video_hole_frame_cb);
   update_starboard_rendering_mode_cb_ =
       std::move(update_starboard_rendering_mode_cb);
 #if BUILDFLAG(IS_ANDROID)
   request_overlay_info_cb_ = std::move(request_overlay_info_cb);
 #endif  // BUILDFLAG(IS_ANDROID)
+  
+  LOG(INFO) << "[MODE SETTING] StarboardRenderer callbacks SET"
+            << " | paint_video_hole_frame_cb_ is null: " << paint_video_hole_frame_cb_.is_null()
+            << " | update_starboard_rendering_mode_cb_ is null: " << update_starboard_rendering_mode_cb_.is_null()
+            << " | PURPOSE: Callbacks ready for video rendering mode notifications";
 }
 
 void StarboardRenderer::OnVideoGeometryChange(const gfx::Rect& output_rect) {
@@ -660,10 +686,25 @@ void StarboardRenderer::CreatePlayerBridge() {
             << " | DRM System: " << (SbDrmSystemIsValid(drm_system_) ? "VALID" : "INVALID")
             << " | PURPOSE: This is the actual Starboard player creation for punch-out video";
 
+  // Create graphics context provider for decode-to-texture support
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+  if (!graphics_context_provider_) {
+    LOG(INFO) << "[DTT-PRODUCTION] Creating FakeGraphicsContextProvider for decode-to-texture support";
+    graphics_context_provider_ = std::make_unique<starboard::testing::FakeGraphicsContextProvider>();
+  }
+  
+  auto get_graphics_context_provider = base::BindRepeating(
+      [](starboard::testing::FakeGraphicsContextProvider* provider) {
+        return provider->decoder_target_provider();
+      },
+      base::Unretained(graphics_context_provider_.get()));
+#else
+  auto get_graphics_context_provider = SbPlayerBridge::GetDecodeTargetGraphicsContextProviderFunc();
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+  
   player_bridge_.reset(new SbPlayerBridge(
       GetSbPlayerInterface(), task_runner_,
-      // TODO(b/375070492): Implement decode-to-texture support
-      SbPlayerBridge::GetDecodeTargetGraphicsContextProviderFunc(),
+      get_graphics_context_provider,
       audio_config, audio_mime_type, video_config, video_mime_type,
       // TODO(b/326497953): Support suspend/resume.
       // TODO(b/326508279): Support background mode.
@@ -671,7 +712,11 @@ void StarboardRenderer::CreatePlayerBridge() {
       // TODO(b/326497953): Support suspend/resume.
       false,
       // TODO(b/326825450): Revisit 360 videos.
-      kSbPlayerOutputModeInvalid, max_video_capabilities_,
+      kSbPlayerOutputModeInvalid,
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+      decode_target_provider_.get(),
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+      max_video_capabilities_,
       // TODO(b/326654546): Revisit HTMLVideoElement.setMaxVideoInputSize.
       -1));
   if (player_bridge_->IsValid()) {
@@ -707,12 +752,34 @@ void StarboardRenderer::CreatePlayerBridge() {
 
   if (player_bridge_ && player_bridge_->IsValid()) {
     const auto output_mode = player_bridge_->GetSbPlayerOutputMode();
+    
+    // [MODE SETTING] FINAL STEP: StarboardRenderer reads the output mode and sets rendering mode
+    LOG(INFO) << "[MODE SETTING] FINAL STEP: StarboardRenderer reading output mode from SbPlayerBridge"
+              << " | SbPlayerBridge::GetSbPlayerOutputMode() returned: " << GetPlayerOutputModeName(output_mode)
+              << " | About to call update_starboard_rendering_mode_cb with corresponding StarboardRenderingMode";
+    
     switch (output_mode) {
       case kSbPlayerOutputModeDecodeToTexture:
-        update_starboard_rendering_mode_cb_.Run(
-            StarboardRenderingMode::kDecodeToTexture);
+        LOG(INFO) << "[MODE SETTING] FINAL: Setting StarboardRenderingMode::kDecodeToTexture"
+                  << " | This should DISABLE punch-out mode and ENABLE decode-to-texture rendering"
+                  << " | Expected: No video holes, no hardware overlay, GPU compositing of video texture";
+        LOG(INFO) << "[MODE SETTING] INVOKING CALLBACK: update_starboard_rendering_mode_cb_.Run(kDecodeToTexture)"
+                  << " | Callback is null: " << update_starboard_rendering_mode_cb_.is_null()
+                  << " | This callback should stop video hole creation and switch to DTT rendering";
+        if (!update_starboard_rendering_mode_cb_.is_null()) {
+          update_starboard_rendering_mode_cb_.Run(
+              StarboardRenderingMode::kDecodeToTexture);
+          LOG(INFO) << "[MODE SETTING] CALLBACK INVOKED: update_starboard_rendering_mode_cb_.Run(kDecodeToTexture) CALLED"
+                    << " | Expected result: StarboardRendererClient should stop creating video holes";
+        } else {
+          LOG(ERROR) << "[MODE SETTING] CRITICAL ERROR: update_starboard_rendering_mode_cb_ is NULL!"
+                     << " | This means DTT mode cannot be activated - video holes will continue";
+        }
         break;
       case kSbPlayerOutputModePunchOut:
+        LOG(INFO) << "[MODE SETTING] FINAL: Setting StarboardRenderingMode::kPunchOut"
+                  << " | This will ENABLE punch-out mode with hardware video overlay"
+                  << " | Expected: Video holes created, hardware surface rendering";
         update_starboard_rendering_mode_cb_.Run(
             StarboardRenderingMode::kPunchOut);
         break;

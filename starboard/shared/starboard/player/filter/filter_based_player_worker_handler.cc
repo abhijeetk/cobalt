@@ -82,6 +82,25 @@ FilterBasedPlayerWorkerHandler::FilterBasedPlayerWorkerHandler(
       max_video_input_size_(0),
       decode_target_graphics_context_provider_(provider),
       video_stream_info_(creation_param->video_stream_info) {
+  
+  // [DTT-DEBUG] FilterBasedPlayerWorkerHandler constructor - trace graphics context provider flow
+  SB_LOG(INFO) << "[DTT-DEBUG] FilterBasedPlayerWorkerHandler Constructor - PROVIDER ANALYSIS"
+               << " | Output Mode: " << static_cast<int>(creation_param->output_mode)
+               << " | Video Codec: " << static_cast<int>(creation_param->video_stream_info.codec)
+               << " | provider parameter: " << (provider ? "PROVIDED" : "NULL")
+               << " | decode_target_graphics_context_provider_ member: " << (decode_target_graphics_context_provider_ ? "SET" : "NULL")
+               << " | PURPOSE: Tracing where graphics context provider comes from for DTT mode";
+               
+  if (creation_param->output_mode == kSbPlayerOutputModeDecodeToTexture) {
+    SB_LOG(INFO) << "[DTT-DEBUG] DTT MODE REQUESTED IN FILTER WORKER"
+                 << " | Graphics context provider: " << (decode_target_graphics_context_provider_ ? "AVAILABLE" : "MISSING")
+                 << " | This provider will be passed to CreationParameters and then VideoDecoder";
+    if (!decode_target_graphics_context_provider_) {
+      SB_LOG(ERROR) << "[DTT-DEBUG] CRITICAL: Graphics context provider is NULL in FilterBasedPlayerWorkerHandler"
+                    << " | This means DTT VideoDecoder will fail to initialize"
+                    << " | Root cause: Provider not passed from PlayerWorker level";
+    }
+  }
   update_job_ = std::bind(&FilterBasedPlayerWorkerHandler::Update, this);
 }
 

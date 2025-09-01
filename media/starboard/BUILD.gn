@@ -31,8 +31,8 @@ source_set("starboard") {
     # TODO(b/375069564): Revisit CValStats
     "COBALT_MEDIA_ENABLE_CVAL=0",
 
-    # TODO(b/375070492): Revisit decode-to-texture
-    "COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER=0",
+    # TODO(b/375070492): Revisit decode-to-texture - [DTT-DEBUG] ENABLED for testing with FakeGraphicsContextProvider
+    "COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER=1",
 
     # TODO(b/375218518): Revisit FormatSupportQueryMetrics
     "COBALT_MEDIA_ENABLE_FORMAT_SUPPORT_QUERY_METRICS=0",
@@ -98,6 +98,11 @@ source_set("starboard") {
       "starboard_renderer.h",
       "starboard_utils.cc",
       "starboard_utils.h",
+    ]
+    # Include FakeGraphicsContextProvider for DTT support
+    sources += [
+      "//starboard/testing/fake_graphics_context_provider.cc",
+      "//starboard/testing/fake_graphics_context_provider.h",
     ]
   }
 

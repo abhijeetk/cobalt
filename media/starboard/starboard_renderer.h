@@ -39,6 +39,15 @@
 #include "media/base/android_overlay_mojo_factory.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+#include "cobalt/media/base/decode_target_provider.h"
+namespace starboard {
+namespace testing {
+class FakeGraphicsContextProvider;
+}
+}
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+
 namespace media {
 using base::Time;
 using base::TimeDelta;
@@ -250,6 +259,12 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
   SbDrmSystem drm_system_{kSbDrmSystemInvalid};
 
   std::unique_ptr<SbPlayerBridge> player_bridge_;
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+  // Graphics context provider for decode-to-texture support
+  std::unique_ptr<starboard::testing::FakeGraphicsContextProvider> graphics_context_provider_;
+  // DecodeTargetProvider for managing decode target functionality
+  scoped_refptr<cobalt::media::DecodeTargetProvider> decode_target_provider_;
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
   bool player_bridge_initialized_ = false;
   std::optional<TimeDelta> playing_start_from_time_;

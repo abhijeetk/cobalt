@@ -572,12 +572,15 @@ void StarboardRenderer::CreatePlayerBridge() {
   // number of active players.
   player_bridge_.reset();
 
-  LOG(INFO) << "Creating SbPlayerBridge.";
+  auto context_provider_func = base::BindRepeating(
+      &SbPlayerBridge::GetDecodeTargetGraphicsContextProvider);
+  LOG(INFO) << "[ABHIJEET] Creating SbPlayerBridge." << (context_provider_func ? " With" : " Without")
+            << " decode target graphics context provider.";
 
   player_bridge_.reset(new SbPlayerBridge(
       GetSbPlayerInterface(), task_runner_,
       // TODO(b/375070492): Implement decode-to-texture support
-      SbPlayerBridge::GetDecodeTargetGraphicsContextProviderFunc(),
+      context_provider_func,
       audio_config, audio_mime_type, video_config, video_mime_type,
       // TODO(b/326497953): Support suspend/resume.
       // TODO(b/326508279): Support background mode.
@@ -585,7 +588,11 @@ void StarboardRenderer::CreatePlayerBridge() {
       // TODO(b/326497953): Support suspend/resume.
       false,
       // TODO(b/326825450): Revisit 360 videos.
-      kSbPlayerOutputModeInvalid, max_video_capabilities_,
+      kSbPlayerOutputModeInvalid,
+#if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+      new cobalt::media::DecodeTargetProvider(),  // decode_target_provider - create new instance
+#endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
+      max_video_capabilities_,
       // TODO(b/326654546): Revisit HTMLVideoElement.setMaxVideoInputSize.
       -1));
   if (player_bridge_->IsValid()) {

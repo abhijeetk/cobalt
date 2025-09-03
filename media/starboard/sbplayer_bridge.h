@@ -111,7 +111,7 @@ class SbPlayerBridge {
                  bool allow_resume_after_suspend,
                  SbPlayerOutputMode default_output_mode,
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-                 DecodeTargetProvider* const decode_target_provider,
+                 cobalt::media::DecodeTargetProvider* const decode_target_provider,
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
                  const std::string& max_video_capabilities,
                  int max_video_input_size
@@ -167,6 +167,11 @@ class SbPlayerBridge {
   }
 
   SbDecodeTarget GetCurrentSbDecodeTarget();
+
+  // Static function to get decode target graphics context provider for Android.
+  // Returns SbDecodeTargetGraphicsContextProvider for decode-to-texture support.
+  static SbDecodeTargetGraphicsContextProvider*
+  GetDecodeTargetGraphicsContextProvider();
   SbPlayerOutputMode GetSbPlayerOutputMode();
 
   void RecordSetDrmSystemReadyTime(base::Time timestamp) {
@@ -340,7 +345,7 @@ class SbPlayerBridge {
   SbPlayerOutputMode output_mode_;
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-  DecodeTargetProvider* const decode_target_provider_;
+  cobalt::media::DecodeTargetProvider* const decode_target_provider_;
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
   // Keep copies of the mime type strings instead of using the ones in the

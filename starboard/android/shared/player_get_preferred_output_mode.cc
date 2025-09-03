@@ -16,12 +16,17 @@
 
 #include <algorithm>
 
+#include "base/logging.h"
 #include "starboard/configuration.h"
 #include "starboard/shared/starboard/media/media_util.h"
 #include "starboard/shared/starboard/player/filter/player_components.h"
 
 SbPlayerOutputMode SbPlayerGetPreferredOutputMode(
     const SbPlayerCreationParam* creation_param) {
+  // If decode to texture is preferred, always return that.
+  LOG(ERROR) << "[ABHIJEET][MODE SETTING] : Starboard calling SbPlayerGetPreferredOutputMode with creation_param->output_mode = " << creation_param->output_mode << " but we are always returning DecodeToTexture for now." << kSbPlayerOutputModeDecodeToTexture;
+  return kSbPlayerOutputModeDecodeToTexture;
+
   using starboard::shared::starboard::player::filter::PlayerComponents;
 
   if (!creation_param) {

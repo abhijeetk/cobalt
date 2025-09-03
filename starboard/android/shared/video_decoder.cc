@@ -394,7 +394,7 @@ VideoDecoder::VideoDecoder(const VideoStreamInfo& video_stream_info,
       has_new_texture_available_(false),
       number_of_preroll_frames_(kInitialPrerollFrameCount) {
   SB_DCHECK(error_message);
-
+  SB_LOG(ERROR) << "[ABHIJEET] VideoDecoder::VideoDecoder() => decode_target_graphics_context_provider_ : " << decode_target_graphics_context_provider_;
   if (force_secure_pipeline_under_tunnel_mode) {
     SB_DCHECK_NE(tunnel_mode_audio_session_id_, -1);
     SB_DCHECK(!drm_system_);

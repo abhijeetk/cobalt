@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "starboard/extension/player_configuration.h"
 #include "starboard/system.h"
@@ -66,7 +67,10 @@ SbPlayerOutputMode DefaultSbPlayerInterface::GetPreferredOutputMode(
     const SbPlayerCreationParam* creation_param) {
   media_metrics_provider_.StartTrackingAction(
       MediaAction::SBPLAYER_GET_PREFERRED_OUTPUT_MODE);
+  LOG(INFO) << "[ABHIJEET][MODE SETTING] LAYER 1: Chromium Media Interface calling SbPlayerGetPreferredOutputMode" ;
   auto output_mode = SbPlayerGetPreferredOutputMode(creation_param);
+  LOG(INFO) << "[ABHIJEET][MODE SETTING] LAYER 1: Chromium Media Interface calling SbPlayerGetPreferredOutputMode. Selected : " << output_mode;
+  //base::debug::StackTrace().Print();
   media_metrics_provider_.EndTrackingAction(
       MediaAction::SBPLAYER_GET_PREFERRED_OUTPUT_MODE);
   return output_mode;

@@ -24,6 +24,8 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #if COBALT_MEDIA_ENABLE_STARTUP_LATENCY_TRACKING
@@ -168,7 +170,7 @@ SbPlayerBridge::SbPlayerBridge(
     SbPlayerOutputMode default_output_mode,
     const OnEncryptedMediaInitDataEncounteredCB&
         on_encrypted_media_init_data_encountered_cb,
-    DecodeTargetProvider* const decode_target_provider,
+    cobalt::media::DecodeTargetProvider* const decode_target_provider,
     std::string pipeline_identifier)
     : url_(url),
       sbplayer_interface_(interface),
@@ -219,7 +221,7 @@ SbPlayerBridge::SbPlayerBridge(
     bool allow_resume_after_suspend,
     SbPlayerOutputMode default_output_mode,
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-    DecodeTargetProvider* const decode_target_provider,
+    cobalt::media::DecodeTargetProvider* const decode_target_provider,
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
     const std::string& max_video_capabilities,
     int max_video_input_size
@@ -300,7 +302,7 @@ SbPlayerBridge::~SbPlayerBridge() {
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
   decode_target_provider_->SetOutputMode(
-      DecodeTargetProvider::kOutputModeInvalid);
+      cobalt::media::DecodeTargetProvider::kOutputModeInvalid);
   decode_target_provider_->ResetGetCurrentSbDecodeTargetFunction();
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
@@ -607,7 +609,7 @@ void SbPlayerBridge::Suspend() {
 
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
   decode_target_provider_->SetOutputMode(
-      DecodeTargetProvider::kOutputModeInvalid);
+      cobalt::media::DecodeTargetProvider::kOutputModeInvalid);
   decode_target_provider_->ResetGetCurrentSbDecodeTargetFunction();
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
 
@@ -660,19 +662,19 @@ void SbPlayerBridge::Resume(SbWindow window) {
 
 namespace {
 
-DecodeTargetProvider::OutputMode ToVideoFrameProviderOutputMode(
+cobalt::media::DecodeTargetProvider::OutputMode ToVideoFrameProviderOutputMode(
     SbPlayerOutputMode output_mode) {
   switch (output_mode) {
     case kSbPlayerOutputModeDecodeToTexture:
-      return DecodeTargetProvider::kOutputModeDecodeToTexture;
+      return cobalt::media::DecodeTargetProvider::kOutputModeDecodeToTexture;
     case kSbPlayerOutputModePunchOut:
-      return DecodeTargetProvider::kOutputModePunchOut;
+      return cobalt::media::DecodeTargetProvider::kOutputModePunchOut;
     case kSbPlayerOutputModeInvalid:
-      return DecodeTargetProvider::kOutputModeInvalid;
+      return cobalt::media::DecodeTargetProvider::kOutputModeInvalid;
   }
 
   NOTREACHED();
-  return DecodeTargetProvider::kOutputModeInvalid;
+  return cobalt::media::DecodeTargetProvider::kOutputModeInvalid;
 }
 
 }  // namespace
@@ -816,8 +818,12 @@ void SbPlayerBridge::CreatePlayer() {
     // If the player is setup to decode to texture, then provide Cobalt with
     // a method of querying that texture.
 #if COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
-    decode_target_provider_->SetGetCurrentSbDecodeTargetFunction(base::Bind(
-        &SbPlayerBridge::GetCurrentSbDecodeTarget, base::Unretained(this)));
+    if (decode_target_provider_) {
+      decode_target_provider_->SetGetCurrentSbDecodeTargetFunction(base::BindRepeating(
+          &SbPlayerBridge::GetCurrentSbDecodeTarget, base::Unretained(this)));
+    } else {
+      LOG(ERROR) << "[ABHIJEET] Decode target provider is null.";
+    }
 #endif  // COBALT_MEDIA_ENABLE_DECODE_TARGET_PROVIDER
     LOG(INFO) << "Playing in decode-to-texture mode.";
   } else {
@@ -1427,6 +1433,56 @@ void SbPlayerBridge::SendColorSpaceHistogram() const {
     UmaHistogramEnumeration("Cobalt.Media.SDR.Matrix", cs_info.matrix);
     UmaHistogramEnumeration("Cobalt.Media.SDR.Range", cs_info.range);
   }
+}
+
+// Android-specific context runner for decode-to-texture support
+#if BUILDFLAG(IS_ANDROID)
+static void AndroidDecodeTargetGlesContextRunner(
+    SbDecodeTargetGraphicsContextProvider* graphics_context_provider,
+    SbDecodeTargetGlesContextRunnerTarget target_function,
+    void* target_function_context) {
+  // For Android, the MediaCodec + SurfaceTexture combination handles most of the
+  // EGL context management internally. We can run the target function directly
+  // since the Android video decoder ensures the GL context is available when needed.
+  LOG(INFO) << "[ABHIJEET] AndroidDecodeTargetGlesContextRunner called"
+            << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+  
+  if (target_function) {
+    target_function(target_function_context);
+    LOG(INFO) << "[ABHIJEET] AndroidDecodeTargetGlesContextRunner completed target function"
+              << " (Thread: " << base::PlatformThread::CurrentId() << ")";
+  }
+}
+#endif
+
+// static
+SbDecodeTargetGraphicsContextProvider*
+SbPlayerBridge::GetDecodeTargetGraphicsContextProvider() {
+#if BUILDFLAG(IS_ANDROID)
+  // Android-specific implementation for decode-to-texture support.
+  LOG(INFO) << "[ABHIJEET] Process ID : [" << base::GetCurrentProcId() 
+            << "] Thread ID : [" << base::PlatformThread::CurrentId() 
+            << "] Thread Name :" << base::PlatformThread::GetName();
+  LOG(INFO) << "[ABHIJEET] GetDecodeTargetGraphicsContextProvider called for Android";
+  
+  // Create a basic Android graphics context provider.
+  // This is a minimal implementation that provides the required interface
+  // for decode-to-texture functionality on Android.
+  static SbDecodeTargetGraphicsContextProvider android_provider = {
+    // Android uses EGL context running, so we provide a basic EGL context runner
+    nullptr,  // egl_display - Android MediaCodec handles EGL display internally
+    nullptr,  // egl_context - Android MediaCodec handles EGL context internally
+    AndroidDecodeTargetGlesContextRunner,  // gles_context_runner - our Android-specific runner
+    nullptr   // gles_context_runner_context - not needed for this implementation
+  };
+  
+  LOG(INFO) << "[ABHIJEET] Returning Android graphics context provider with context runner";
+  return &android_provider;
+#else
+  // For non-Android platforms, decode-to-texture might not be supported
+  LOG(INFO) << "[ABHIJEET] Non-Android platform - decode-to-texture not supported";
+  return nullptr;
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 }  // namespace media

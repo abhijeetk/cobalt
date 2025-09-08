@@ -55,7 +55,7 @@ ApplicationAndroid::ApplicationAndroid(
     const std::string& files_dir,
     const std::string& cache_dir,
     const std::string& native_library_dir)
-    : QueueApplication(stubSbEventHandle) {
+    : Application(stubSbEventHandle) {
   SetCommandLine(std::move(command_line));
   // Initialize Time Zone early so that local time works correctly.
   // Called once here to help SbTimeZoneGet*Name()

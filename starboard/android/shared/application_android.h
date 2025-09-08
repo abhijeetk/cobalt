@@ -46,31 +46,66 @@ class ApplicationAndroid
 
  protected:
   // --- Application pure virtual method implementations ---
-  Event* GetNextEvent() override {
+  int Run(CommandLine command_line, const char* link_data) override {
     SB_NOTIMPLEMENTED();
-    return NULL;
+    return 0;
+  }
+  int Run(CommandLine command_line) override {
+    SB_NOTIMPLEMENTED();
+    return 0;
+  }
+  int Run(int argc, char** argv, const char* link_data) override {
+    SB_NOTIMPLEMENTED();
+    return 0;
+  }
+  int Run(int argc, char** argv) override {
+    SB_NOTIMPLEMENTED();
+    return 0;
   }
 
-  void Inject(Event* event) override {
+  void Blur(void* context, EventHandledCallback callback) override {
+    SB_NOTIMPLEMENTED();
+  }
+  void Focus(void* context, EventHandledCallback callback) override {
+    SB_NOTIMPLEMENTED();
+  }
+  void Conceal(void* context, EventHandledCallback callback) override {
+    SB_NOTIMPLEMENTED();
+  }
+  void Reveal(void* context, EventHandledCallback callback) override {
+    SB_NOTIMPLEMENTED();
+  }
+  void Freeze(void* context, EventHandledCallback callback) override {
+    SB_NOTIMPLEMENTED();
+  }
+  void Unfreeze(void* context, EventHandledCallback callback) override {
+    SB_NOTIMPLEMENTED();
+  }
+  void Stop(int error_level) override { SB_NOTIMPLEMENTED(); }
+  void Link(const char* link_data) override { SB_NOTIMPLEMENTED(); }
+  void InjectLowMemoryEvent() override { SB_NOTIMPLEMENTED(); }
+  void InjectOsNetworkDisconnectedEvent() override { SB_NOTIMPLEMENTED(); }
+  void InjectOsNetworkConnectedEvent() override { SB_NOTIMPLEMENTED(); }
+  void WindowSizeChanged(void* context, EventHandledCallback callback) override {
     SB_NOTIMPLEMENTED();
   }
 
-  void InjectTimedEvent(TimedEvent* timed_event) override {
+  SbEventId Schedule(SbEventCallback callback,
+                     void* context,
+                     int64_t delay) override {
     SB_NOTIMPLEMENTED();
+    return kSbEventIdInvalid;
   }
+  void Cancel(SbEventId id) override { SB_NOTIMPLEMENTED(); }
 
-  void CancelTimedEvent(SbEventId event_id) override {
+  void HandleFrame(SbPlayer player,
+                   const scoped_refptr<VideoFrame>& frame,
+                   int z_index,
+                   int x,
+                   int y,
+                   int width,
+                   int height) override {
     SB_NOTIMPLEMENTED();
-  }
-
-  TimedEvent* GetNextDueTimedEvent() override {
-    SB_NOTIMPLEMENTED();
-    return NULL;
-  }
-
-  int64_t GetNextTimedEventTargetTime() override {
-    SB_NOTIMPLEMENTED();
-    return std::numeric_limits<int64_t>::max();
   }
 
  private:

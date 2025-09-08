@@ -12,125 +12,122 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A simple queue-based application implementation.
-
 #ifndef STARBOARD_SHARED_STARBOARD_QUEUE_APPLICATION_H_
 #define STARBOARD_SHARED_STARBOARD_QUEUE_APPLICATION_H_
+
+#include <pthread.h>
 
 #include <map>
 #include <mutex>
 #include <set>
+#include <vector>
 
 #include "starboard/common/queue.h"
+#include "starboard/common/time.h"
 #include "starboard/shared/internal_only.h"
 #include "starboard/shared/starboard/application.h"
 #include "starboard/types.h"
 
-namespace starboard::shared::starboard {
+namespace starboard {
+namespace shared {
+namespace starboard {
 
-// An application implementation that uses a signaling thread-safe queue to
-// manage event dispatching.
 class QueueApplication : public Application {
  public:
-  explicit QueueApplication(SbEventHandleCallback sb_event_handle_callback)
-      : Application(sb_event_handle_callback) {}
-  ~QueueApplication() override {}
+  explicit QueueApplication(SbEventHandleCallback sb_event_handle_callback);
+  ~QueueApplication() override;
+
+  // --- Application Overrides ---
+  int Run(CommandLine command_line, const char* link_data) override;
+  int Run(CommandLine command_line) override;
+  int Run(int argc, char** argv, const char* link_data) override;
+  int Run(int argc, char** argv) override;
+
+  void Blur(void* context, EventHandledCallback callback) override;
+  void Focus(void* context, EventHandledCallback callback) override;
+  void Conceal(void* context, EventHandledCallback callback) override;
+  void Reveal(void* context, EventHandledCallback callback) override;
+  void Freeze(void* context, EventHandledCallback callback) override;
+  void Unfreeze(void* context, EventHandledCallback callback) override;
+  void Stop(int error_level) override;
+  void Link(const char* link_data) override;
+  void InjectLowMemoryEvent() override;
+  void InjectOsNetworkDisconnectedEvent() override;
+  void InjectOsNetworkConnectedEvent() override;
+  void WindowSizeChanged(void* context, EventHandledCallback callback) override;
+
+  SbEventId Schedule(SbEventCallback callback,
+                     void* context,
+                     int64_t delay) override;
+  void Cancel(SbEventId id) override;
+
+  void HandleFrame(SbPlayer player,
+                   const scoped_refptr<VideoFrame>& frame,
+                   int z_index,
+                   int x,
+                   int y,
+                   int width,
+                   int height) override;
 
  protected:
-  // Wakes up GetNextEvent, and ensures it recalculates the wait duration.
-  void Wake();
+  // --- Event and Lifecycle Structs ---
+  enum State {
+    kStateUnstarted,
+    kStateStarted,
+    kStateBlurred,
+    kStateConcealed,
+    kStateFrozen,
+    kStateStopped,
+  };
 
-  // --- Application overrides ---
-  Event* GetNextEvent() override;
-  void Inject(Event* event) override;
-  void InjectTimedEvent(TimedEvent* timed_event) override;
-  void CancelTimedEvent(SbEventId event_id) override;
-  TimedEvent* GetNextDueTimedEvent() override;
-  int64_t GetNextTimedEventTargetTime() override;
+  struct TimedEvent;
+  struct Event;
 
-  // Add the given event onto the event queue, then process the queue until the
-  // event is handled. This is similar to DispatchAndDelete but will process
-  // the queue in order until the new event is handled rather than processing
-  // the event out of order. If the caller is part of system event handling,
-  // then consider passing |checkSystemEvents| = false to avoid recursion if
-  // needed.
-  void InjectAndProcess(SbEventType type, bool checkSystemEvents);
-
-  // Returns true if it is valid to poll/query for system events.
+  // --- Platform-specific event handling --- 
   virtual bool MayHaveSystemEvents() = 0;
-
-  // Returns an event if one exists, otherwise returns NULL.
-  virtual Event* PollNextSystemEvent() {
-    return WaitForSystemEventWithTimeout(0);
-  }
-
-  // Waits for an event until the timeout |time| (in microseconds) runs out. If
-  // an event occurs in this time, it is returned, otherwise NULL is returned.
-  // If |time| is zero or negative, then this should function effectively like
-  // a no-wait poll.
+  virtual Event* PollNextSystemEvent() = 0;
   virtual Event* WaitForSystemEventWithTimeout(int64_t time) = 0;
-
-  // Wakes up any thread waiting within a call to
-  // WaitForSystemEventWithTimeout().
   virtual void WakeSystemEventWait() = 0;
 
  private:
-  // Use Inject() or InjectAndProcess(). DispatchAndDelete() ignores the event
-  // queue and processes the event out of order which can lead to bugs.
-  using Application::DispatchAndDelete;
+  // --- Private helper methods ---
+  int RunLoop();
+  void DispatchNextEvent();
+  bool DispatchAndDelete(Event* event);
+  bool HandleEventAndUpdateState(Event* event);
+  Event* CreateInitialEvent(SbEventType type, int64_t timestamp);
+  void DispatchStart(int64_t timestamp);
+  void DispatchPreload(int64_t timestamp);
+  bool IsStartImmediate();
+  bool IsPreloadImmediate();
+  bool HasPreloadSwitch();
+  void CallTeardownCallbacks();
+  void SetStartLink(const char* start_link);
 
-  // Specialization of Queue for starboard events.  It differs in that it has
-  // the responsibility of deleting heap allocated starboard events in its
-  // destructor.  Note the non-virtual destructor, which is intentional and
-  // safe, as Queue has no virtual functions and EventQueue is never used
-  // polymorphically.
-  class EventQueue : public Queue<Event*> {
-   public:
-    ~EventQueue() {
-      while (Event* event = Poll()) {
-        delete event;
-      }
-    }
-  };
+  Event* GetNextEvent();
+  void Inject(Event* event);
+  void InjectTimedEvent(TimedEvent* timed_event);
+  void CancelTimedEvent(SbEventId event_id);
+  TimedEvent* GetNextDueTimedEvent();
+  int64_t GetNextTimedEventTargetTime();
 
-  class TimedEventQueue {
-   public:
-    TimedEventQueue();
-    ~TimedEventQueue();
+  // --- Private members ---
+  pthread_t thread_;
+  State state_;
+  int error_level_;
+  char* start_link_;
+  std::mutex callbacks_lock_;
+  std::vector<TeardownCallback> teardown_callbacks_;
 
-    // Returns whether the new event pushed up the next wakeup time.
-    bool Inject(TimedEvent* timed_event);
-    void Cancel(SbEventId event_id);
-    TimedEvent* Get();
-    int64_t GetTime();
+  class EventQueue;
+  class TimedEventQueue;
 
-   private:
-    int64_t GetTimeLocked();
-    typedef bool (*TimedEventComparator)(const TimedEvent* lhs,
-                                         const TimedEvent* rhs);
-    static bool IsLess(const TimedEvent* lhs, const TimedEvent* rhs);
-
-    std::mutex mutex_;
-    typedef std::map<SbEventId, TimedEvent*> TimedEventMap;
-    TimedEventMap map_;
-    typedef std::set<TimedEvent*, TimedEventComparator> TimedEventSet;
-    TimedEventSet set_;
-  };
-
-  // Polls the queue for the next event, returning NULL if there is nothing to
-  // execute.
-  Event* PollNextInjectedEvent();
-
-  // Returns the next non-system event, waiting for it if none are currently
-  // available.  Called from within GetNextEvent().
-  Event* GetNextInjectedEvent();
-
-  TimedEventQueue timed_event_queue_;
-
-  // The queue of events that have not yet been dispatched.
-  EventQueue event_queue_;
+  std::unique_ptr<EventQueue> event_queue_;
+  std::unique_ptr<TimedEventQueue> timed_event_queue_;
 };
 
-}  // namespace starboard::shared::starboard
+}  // namespace starboard
+}  // namespace shared
+}  // namespace starboard
 
 #endif  // STARBOARD_SHARED_STARBOARD_QUEUE_APPLICATION_H_

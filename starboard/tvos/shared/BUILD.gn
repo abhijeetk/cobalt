@@ -24,6 +24,7 @@ static_library("starboard_platform") {
     "//starboard/shared/starboard/log_raw_format.cc",
     "configuration_constants.cc",
     "configuration_public.h",
+    "system_get_number_of_processors.mm",
   ]
 
   configs += [ "//starboard/build/config:starboard_implementation" ]

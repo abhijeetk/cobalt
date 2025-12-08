@@ -33,50 +33,129 @@ namespace {
 // gets lost with hardcoded MIME string. This can sometimes cause issues. For
 // example, vp9 profile 2 indicates hdr support, so an implementation accepts
 // "codecs=vp9" may reject "codecs=vp9.2".
-std::string GetMimeFromVideoType(const ::media::VideoType& type) {
-  // The MIME string is for very basic video codec supportability check.
+std::vector<std::string> GetMimeFromVideoType(const ::media::VideoType& type) {
+  // The MIME strings are for basic video codec supportability checks.
   switch (type.codec) {
     case ::media::VideoCodec::kH264:
-      return "video/mp4; codecs=\"avc1.4d4015\"";
+      return {"video/mp4; codecs=\"avc1.4d4015\""};
     case ::media::VideoCodec::kVP9:
-      return "video/webm; codecs=\"vp9\"";
+      return {"video/webm; codecs=\"vp9\"",
+              "video/mp4; codecs=\"vp09.00.10.08\""};
     case ::media::VideoCodec::kAV1:
-      return "video/mp4; codecs=\"av01.0.08M.08\"";
+      return {"video/mp4; codecs=\"av01.0.08M.08\""};
+    case ::media::VideoCodec::kHEVC:
+      return {"video/mp4; codecs=\"hvc1.1.6.L93.B0\""};
+    case ::media::VideoCodec::kVP8:
+      return {"video/webm; codecs=\"vp8\""};
+    case ::media::VideoCodec::kMPEG2:
+    case ::media::VideoCodec::kTheora:
+    case ::media::VideoCodec::kVC1:
+      return {};
     default:
-      return "";
+      return {};
   }
 }
 
 // TODO(b/376542844): Eliminate the usage of hardcoded MIME string once we
 // support to query codec capabilities with configs.
-std::string GetMimeFromAudioType(const ::media::AudioType& type) {
+std::vector<std::string> GetMimeFromAudioType(const ::media::AudioType& type) {
   // The MIME string is for very basic audio codec supportability check.
   switch (type.codec) {
     case ::media::AudioCodec::kAAC:
-      return "audio/mp4; codecs=\"mp4a.40.2\"";
+      return {"audio/mp4; codecs=\"mp4a.40.2\""};
     case ::media::AudioCodec::kAC3:
-      return "audio/mp4; codecs=\"ac-3\"";
+      return {"audio/mp4; codecs=\"ac-3\""};
     case ::media::AudioCodec::kEAC3:
-      return "audio/mp4; codecs=\"ec-3\"";
+      return {"audio/mp4; codecs=\"ec-3\""};
     case ::media::AudioCodec::kOpus:
-      return "audio/webm; codecs=\"opus\"";
-    // TODO(b/375232937): Support IAMF
+      return {"audio/webm; codecs=\"opus\""};
+    case ::media::AudioCodec::kVorbis:
+      return {"audio/webm; codecs=\"vorbis\""};
+    case ::media::AudioCodec::kMP3:
+      return {"audio/mpeg", "audio/mp3"};
+    case ::media::AudioCodec::kFLAC:
+      return {"audio/ogg; codecs=\"flac\"", "audio/flac"};
+    case ::media::AudioCodec::kPCM:
+      return {"audio/wav"};
+    case ::media::AudioCodec::kIAMF:
+      return {"audio/mp4; codecs=\"iamf\""};
     default:
-      return "";
+      return {};
   }
 }
 
 ::media::SupportedCodecs GetStarboardEmeSupportedCodecs() {
-  ::media::SupportedCodecs codecs =
-      ::media::EME_CODEC_AAC | ::media::EME_CODEC_AVC1 |
-      ::media::EME_CODEC_VP9_PROFILE0 | ::media::EME_CODEC_VP9_PROFILE2 |
-      ::media::EME_CODEC_VP8 | ::media::EME_CODEC_OPUS |
-      ::media::EME_CODEC_VORBIS | ::media::EME_CODEC_MPEG_H_AUDIO |
-      ::media::EME_CODEC_FLAC | ::media::EME_CODEC_HEVC_PROFILE_MAIN |
-      ::media::EME_CODEC_HEVC_PROFILE_MAIN10 | ::media::EME_CODEC_AV1 |
-      ::media::EME_CODEC_AC3 | ::media::EME_CODEC_EAC3;
-  // TODO(b/375232937) Add IAMF
-  return codecs;
+  ::media::SupportedCodecs supported_codecs = 0;
+  auto check_mimes = [](const std::vector<std::string>& mimes) {
+    for (const auto& mime : mimes) {
+      if (SbMediaCanPlayMimeAndKeySystem(mime.c_str(), "") !=
+          kSbMediaSupportTypeNotSupported) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // --- Video Codecs ---
+  if (check_mimes(GetMimeFromVideoType(
+          ::media::VideoType(::media::VideoCodec::kH264)))) {
+    supported_codecs |= ::media::EME_CODEC_AVC1;
+  }
+
+  if (check_mimes(GetMimeFromVideoType(
+          ::media::VideoType(::media::VideoCodec::kVP8)))) {
+    supported_codecs |= ::media::EME_CODEC_VP8;
+  }
+
+  if (check_mimes(GetMimeFromVideoType(
+          ::media::VideoType(::media::VideoCodec::kVP9)))) {
+    supported_codecs |=
+        ::media::EME_CODEC_VP9_PROFILE0 | ::media::EME_CODEC_VP9_PROFILE2;
+  }
+
+  if (check_mimes(GetMimeFromVideoType(
+          ::media::VideoType(::media::VideoCodec::kHEVC)))) {
+    supported_codecs |= ::media::EME_CODEC_HEVC_PROFILE_MAIN |
+                        ::media::EME_CODEC_HEVC_PROFILE_MAIN10;
+  }
+
+  if (check_mimes(GetMimeFromVideoType(
+          ::media::VideoType(::media::VideoCodec::kAV1)))) {
+    supported_codecs |= ::media::EME_CODEC_AV1;
+  }
+
+  // --- Audio Codecs ---
+  if (check_mimes(GetMimeFromAudioType(
+          ::media::AudioType(::media::AudioCodec::kAAC)))) {
+    supported_codecs |= ::media::EME_CODEC_AAC;
+  }
+
+  if (check_mimes(GetMimeFromAudioType(
+          ::media::AudioType(::media::AudioCodec::kOpus)))) {
+    supported_codecs |= ::media::EME_CODEC_OPUS;
+  }
+
+  if (check_mimes(GetMimeFromAudioType(
+          ::media::AudioType(::media::AudioCodec::kVorbis)))) {
+    supported_codecs |= ::media::EME_CODEC_VORBIS;
+  }
+
+  if (check_mimes(GetMimeFromAudioType(
+          ::media::AudioType(::media::AudioCodec::kAC3)))) {
+    supported_codecs |= ::media::EME_CODEC_AC3;
+  }
+
+  if (check_mimes(GetMimeFromAudioType(
+          ::media::AudioType(::media::AudioCodec::kEAC3)))) {
+    supported_codecs |= ::media::EME_CODEC_EAC3;
+  }
+
+  if (check_mimes(GetMimeFromAudioType(
+          ::media::AudioType(::media::AudioCodec::kFLAC)))) {
+    supported_codecs |= ::media::EME_CODEC_FLAC;
+  }
+
+  return supported_codecs;
 }
 
 void BindHostReceiverWithValuation(mojo::GenericPendingReceiver receiver) {
@@ -147,29 +226,47 @@ CobaltContentRendererClient::GetSupportedKeySystems(
 bool CobaltContentRendererClient::IsDecoderSupportedAudioType(
     const ::media::AudioType& type) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  std::string mime = GetMimeFromAudioType(type);
-  SbMediaSupportType support_type = kSbMediaSupportTypeNotSupported;
-  if (!mime.empty()) {
-    support_type = SbMediaCanPlayMimeAndKeySystem(mime.c_str(), "");
+  std::vector<std::string> mimes = GetMimeFromAudioType(type);
+  if (mimes.empty()) {
+    return false;
   }
-  bool result = support_type != kSbMediaSupportTypeNotSupported;
-  LOG(INFO) << __func__ << "(" << type.codec << ") -> "
-            << (result ? "true" : "false");
-  return result;
+
+  for (const auto& mime : mimes) {
+    SbMediaSupportType support_type =
+        SbMediaCanPlayMimeAndKeySystem(mime.c_str(), "");
+    if (support_type != kSbMediaSupportTypeNotSupported) {
+      LOG(INFO) << __func__ << "(" << type.codec << ") -> true (mime: " << mime
+                << ")";
+      return true;
+    }
+  }
+
+  LOG(INFO) << __func__ << "(" << type.codec
+            << ") -> false (no supported mime)";
+  return false;
 }
 
 bool CobaltContentRendererClient::IsDecoderSupportedVideoType(
     const ::media::VideoType& type) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  std::string mime = GetMimeFromVideoType(type);
-  SbMediaSupportType support_type = kSbMediaSupportTypeNotSupported;
-  if (!mime.empty()) {
-    support_type = SbMediaCanPlayMimeAndKeySystem(mime.c_str(), "");
+  std::vector<std::string> mimes = GetMimeFromVideoType(type);
+  if (mimes.empty()) {
+    return false;
   }
-  bool result = support_type != kSbMediaSupportTypeNotSupported;
-  LOG(INFO) << __func__ << "(" << type.codec << ") -> "
-            << (result ? "true" : "false");
-  return result;
+
+  for (const auto& mime : mimes) {
+    SbMediaSupportType support_type =
+        SbMediaCanPlayMimeAndKeySystem(mime.c_str(), "");
+    if (support_type != kSbMediaSupportTypeNotSupported) {
+      LOG(INFO) << __func__ << "(" << type.codec << ") -> true (mime: " << mime
+                << ")";
+      return true;
+    }
+  }
+
+  LOG(INFO) << __func__ << "(" << type.codec
+            << ") -> false (no supported mime)";
+  return false;
 }
 
 void CobaltContentRendererClient::RunScriptsAtDocumentStart(

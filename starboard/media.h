@@ -681,6 +681,27 @@ SB_EXPORT int SbMediaGetVideoBufferBudget(SbMediaVideoCodec codec,
                                           int resolution_height,
                                           int bits_per_pixel);
 
+// Returns the number of supported DRM key systems on the platform.
+// This includes both Widevine and platform-specific DRM systems (e.g., FairPlay
+// on Apple platforms).
+//
+// Returns the count of supported key systems, or 0 if none are supported.
+SB_EXPORT int SbGetSupportedKeySystemNamesCount();
+
+// Retrieves the names of supported DRM key systems on the platform.
+//
+// |out_key_system_names|: Array to be filled with pointers to key system name
+// strings. The caller must allocate this array with at least |capacity|
+// elements. The pointers returned are valid for the lifetime of the program.
+//
+// |capacity|: The maximum number of key system names that can be stored in
+// |out_key_system_names|.
+//
+// Returns the actual number of key systems provided, which may be less than
+// |capacity| if fewer key systems are supported.
+SB_EXPORT int SbGetSupportedKeySystemNames(const char* out_key_system_names[],
+                                           int capacity);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

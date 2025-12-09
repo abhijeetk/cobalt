@@ -100,6 +100,23 @@ SB_EXPORT_ANDROID bool MediaIsVideoSupported(SbMediaVideoCodec video_codec,
 SB_EXPORT_ANDROID bool MediaIsAudioSupported(SbMediaAudioCodec audio_codec,
                                              const MimeType* mime_type,
                                              int64_t bitrate);
+
+// Platform-specific implementation to get the count of supported key systems.
+// This is implemented by each platform (e.g., Android, tvOS) to return the
+// number of DRM key systems available, including both Widevine and
+// platform-specific systems.
+SB_EXPORT_ANDROID int GetSupportedKeySystemNamesCount();
+
+// Platform-specific implementation to retrieve supported key system names.
+//
+// |out_key_system_names|: Output array to be filled with key system names.
+// |capacity|: Maximum number of entries that can be stored.
+//
+// Returns the actual number of key systems provided.
+SB_EXPORT_ANDROID int GetSupportedKeySystemNames(
+    const char* out_key_system_names[],
+    int capacity);
+
 }  // namespace shared::starboard::media
 
 // TODO: b/441955897 : Remove these aliases when flattening namespace is

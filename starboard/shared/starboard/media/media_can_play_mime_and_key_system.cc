@@ -30,3 +30,12 @@ SbMediaSupportType SbMediaCanPlayMimeAndKeySystem(const char* mime,
 
   return starboard::CanPlayMimeAndKeySystem(mime, key_system);
 }
+
+int SbGetSupportedKeySystemNamesCount() {
+  return 0;
+}
+
+int SbGetSupportedKeySystemNames(const char* out_key_system_names[],
+                                 int capacity) {
+  return 0;
+}

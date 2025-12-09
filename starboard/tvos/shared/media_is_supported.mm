@@ -18,10 +18,14 @@
 // #include "starboard/shared/widevine/drm_system_widevine.h"
 #include "starboard/tvos/shared/media/drm_system_platform.h"
 
-const char kWidevineL3SystemName[] = "com.youtube.widevine.l3";
-const char kWidevineForceHdcpSystemName[] = "com.youtube.widevine.forcehdcp";
-
 namespace starboard::shared::starboard::media {
+
+// Array of supported key systems for tvOS
+static const char* kSupportedKeySystemNames[] = {
+    "com.youtube.widevine.l3", "com.youtube.widevine.forcehdcp"};
+
+static constexpr int kSupportedKeySystemNamesCount =
+    sizeof(kSupportedKeySystemNames) / sizeof(kSupportedKeySystemNames[0]);
 
 bool MediaIsSupported(SbMediaVideoCodec video_codec,
                       SbMediaAudioCodec audio_codec,
@@ -31,9 +35,10 @@ bool MediaIsSupported(SbMediaVideoCodec video_codec,
     return false;
   }
 
-  if (strcmp(kWidevineL3SystemName, key_system) == 0 ||
-      strcmp(kWidevineForceHdcpSystemName, key_system) == 0) {
-    return true;
+  for (int i = 0; i < kSupportedKeySystemNamesCount; i++) {
+    if (strcmp(kSupportedKeySystemNames[i], key_system) == 0) {
+      return true;
+    }
   }
 
   if (key_system == ::starboard::DrmSystemPlatform::GetKeySystemName()) {
@@ -47,6 +52,44 @@ bool MediaIsSupported(SbMediaVideoCodec video_codec,
           video_codec == kSbMediaVideoCodecVp9) &&
          (audio_codec == kSbMediaAudioCodecNone ||
           audio_codec == kSbMediaAudioCodecAac);
+}
+
+// Returns the total count of supported key systems, including Widevine
+// systems and platform DRM (e.g., FairPlay).
+int GetSupportedKeySystemNamesCount() {
+  // Cache platform DRM key system name (e.g., FairPlay on Apple platforms)
+  static const std::string platform_key_system =
+      ::starboard::DrmSystemPlatform::GetKeySystemName();
+  return kSupportedKeySystemNamesCount + (platform_key_system.empty() ? 0 : 1);
+}
+
+// Fills the output array with supported key system names. Includes Widevine
+// key systems from kSupportedKeySystemNames array and the platform DRM system
+// if available.
+int GetSupportedKeySystemNames(const char* out_key_system_names[],
+                               int capacity) {
+  if (!out_key_system_names || capacity <= 0) {
+    return 0;
+  }
+
+  // Cache platform DRM key system name (e.g., FairPlay on Apple platforms)
+  static const std::string platform_key_system =
+      ::starboard::DrmSystemPlatform::GetKeySystemName();
+
+  int count = 0;
+  // Add Widevine key systems
+  for (int i = 0; i < kSupportedKeySystemNamesCount && count < capacity; i++) {
+    out_key_system_names[count] = kSupportedKeySystemNames[i];
+    count++;
+  }
+
+  // Add platform DRM key system if available
+  if (!platform_key_system.empty() && count < capacity) {
+    out_key_system_names[count] = platform_key_system.c_str();
+    count++;
+  }
+
+  return count;
 }
 
 }  // namespace starboard::shared::starboard::media

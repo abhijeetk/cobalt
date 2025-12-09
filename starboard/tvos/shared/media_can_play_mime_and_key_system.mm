@@ -117,3 +117,13 @@ SbMediaSupportType SbMediaCanPlayMimeAndKeySystem(const char* mime,
   return starboard::shared::starboard::media::CanPlayMimeAndKeySystem(
       mime, key_system);
 }
+
+int SbGetSupportedKeySystemNamesCount() {
+  return starboard::GetPlatformSupportedKeySystemNamesCount();
+}
+
+int SbGetSupportedKeySystemNames(const char* out_key_system_names[],
+                                 int capacity) {
+  return starboard::GetPlatformSupportedKeySystemNames(out_key_system_names,
+                                                       capacity);
+}

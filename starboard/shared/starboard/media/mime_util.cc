@@ -297,4 +297,17 @@ SbMediaSupportType CanPlayMimeAndKeySystem(const char* mime,
              : kSbMediaSupportTypeNotSupported;
 }
 
+// Queries the platform implementation for the number of supported key systems.
+int GetPlatformSupportedKeySystemNamesCount() {
+  return shared::starboard::media::GetSupportedKeySystemNamesCount();
+}
+
+// Queries the platform implementation to fill the array with supported key
+// system names.
+int GetPlatformSupportedKeySystemNames(const char* out_key_system_names[],
+                                       int capacity) {
+  return shared::starboard::media::GetSupportedKeySystemNames(
+      out_key_system_names, capacity);
+}
+
 }  // namespace starboard

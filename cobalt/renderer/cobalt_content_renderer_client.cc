@@ -86,71 +86,83 @@ std::vector<std::string> GetMimeFromAudioType(const ::media::AudioType& type) {
 
 ::media::SupportedCodecs GetStarboardEmeSupportedCodecs() {
   ::media::SupportedCodecs supported_codecs = 0;
-  auto check_mimes = [](const std::vector<std::string>& mimes) {
-    for (const auto& mime : mimes) {
-      if (SbMediaCanPlayMimeAndKeySystem(mime.c_str(), "") !=
-          kSbMediaSupportTypeNotSupported) {
-        return true;
-      }
-    }
-    return false;
-  };
+
+  int key_system_count = SbGetSupportedKeySystemNamesCount();
+
+  if (key_system_count == 0) {
+    LOG(WARNING) << "No platform key systems reported.";
+    return 0;
+  }
+
+  std::vector<const char*> platform_key_systems_c_str(key_system_count);
+  int actual_count = SbGetSupportedKeySystemNames(
+      platform_key_systems_c_str.data(), key_system_count);
+
+  // Helper lambda to check if any of a list of MIME types is supported with
+  // *any* key system.
+  auto check_mimes_with_key_systems =
+      [&](const std::vector<std::string>& mimes) {
+        if (mimes.empty()) {
+          return false;
+        }
+        for (const auto& mime : mimes) {
+          for (int i = 0; i < key_system_count; ++i) {
+            const char* key_system = platform_key_systems_c_str[i];
+            if (SbMediaCanPlayMimeAndKeySystem(mime.c_str(), key_system) !=
+                kSbMediaSupportTypeNotSupported) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
 
   // --- Video Codecs ---
-  if (check_mimes(GetMimeFromVideoType(
+  if (check_mimes_with_key_systems(GetMimeFromVideoType(
           ::media::VideoType(::media::VideoCodec::kH264)))) {
     supported_codecs |= ::media::EME_CODEC_AVC1;
   }
-
-  if (check_mimes(GetMimeFromVideoType(
+  if (check_mimes_with_key_systems(GetMimeFromVideoType(
           ::media::VideoType(::media::VideoCodec::kVP8)))) {
     supported_codecs |= ::media::EME_CODEC_VP8;
   }
-
-  if (check_mimes(GetMimeFromVideoType(
+  if (check_mimes_with_key_systems(GetMimeFromVideoType(
           ::media::VideoType(::media::VideoCodec::kVP9)))) {
     supported_codecs |=
         ::media::EME_CODEC_VP9_PROFILE0 | ::media::EME_CODEC_VP9_PROFILE2;
   }
-
-  if (check_mimes(GetMimeFromVideoType(
+  if (check_mimes_with_key_systems(GetMimeFromVideoType(
           ::media::VideoType(::media::VideoCodec::kHEVC)))) {
     supported_codecs |= ::media::EME_CODEC_HEVC_PROFILE_MAIN |
                         ::media::EME_CODEC_HEVC_PROFILE_MAIN10;
   }
-
-  if (check_mimes(GetMimeFromVideoType(
+  if (check_mimes_with_key_systems(GetMimeFromVideoType(
           ::media::VideoType(::media::VideoCodec::kAV1)))) {
     supported_codecs |= ::media::EME_CODEC_AV1;
   }
 
   // --- Audio Codecs ---
-  if (check_mimes(GetMimeFromAudioType(
+  if (check_mimes_with_key_systems(GetMimeFromAudioType(
           ::media::AudioType(::media::AudioCodec::kAAC)))) {
     supported_codecs |= ::media::EME_CODEC_AAC;
   }
-
-  if (check_mimes(GetMimeFromAudioType(
+  if (check_mimes_with_key_systems(GetMimeFromAudioType(
           ::media::AudioType(::media::AudioCodec::kOpus)))) {
     supported_codecs |= ::media::EME_CODEC_OPUS;
   }
-
-  if (check_mimes(GetMimeFromAudioType(
+  if (check_mimes_with_key_systems(GetMimeFromAudioType(
           ::media::AudioType(::media::AudioCodec::kVorbis)))) {
     supported_codecs |= ::media::EME_CODEC_VORBIS;
   }
-
-  if (check_mimes(GetMimeFromAudioType(
+  if (check_mimes_with_key_systems(GetMimeFromAudioType(
           ::media::AudioType(::media::AudioCodec::kAC3)))) {
     supported_codecs |= ::media::EME_CODEC_AC3;
   }
-
-  if (check_mimes(GetMimeFromAudioType(
+  if (check_mimes_with_key_systems(GetMimeFromAudioType(
           ::media::AudioType(::media::AudioCodec::kEAC3)))) {
     supported_codecs |= ::media::EME_CODEC_EAC3;
   }
-
-  if (check_mimes(GetMimeFromAudioType(
+  if (check_mimes_with_key_systems(GetMimeFromAudioType(
           ::media::AudioType(::media::AudioCodec::kFLAC)))) {
     supported_codecs |= ::media::EME_CODEC_FLAC;
   }

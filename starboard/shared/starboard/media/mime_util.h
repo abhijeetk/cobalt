@@ -47,6 +47,21 @@ namespace starboard {
 SbMediaSupportType CanPlayMimeAndKeySystem(const char* mime,
                                            const char* key_system);
 
+// Wrapper function that queries the platform for the count of supported key
+// systems. This calls into the platform-specific implementation.
+int GetPlatformSupportedKeySystemNamesCount();
+
+// Wrapper function that queries the platform for supported key system names.
+// This calls into the platform-specific implementation to fill the output
+// array with key system name strings.
+//
+// |out_key_system_names|: Output array for key system names.
+// |capacity|: Maximum number of entries that can be stored.
+//
+// Returns the actual number of key systems provided.
+int GetPlatformSupportedKeySystemNames(const char* out_key_system_names[],
+                                       int capacity);
+
 }  // namespace starboard
 
 #endif  // STARBOARD_SHARED_STARBOARD_MEDIA_MIME_UTIL_H_

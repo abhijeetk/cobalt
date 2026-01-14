@@ -45,4 +45,12 @@ blink_modules_sources("mediarecorder") {
     "//third_party/libyuv",
     "//third_party/opus",
   ]
+
+  if (is_starboard) {
+    sources -= [
+#      "vpx_encoder.cc",
+#      "vpx_encoder.h",
+    ]
+    deps -= [ "//third_party/libvpx" ]
+  }
 }

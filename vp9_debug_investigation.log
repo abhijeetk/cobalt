@@ -1,0 +1,147 @@
+[29994:73987:0924/173244.207776:INFO:starboard_renderer.cc(379)] StarboardRenderer changes playback rate from 0 to 1.
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 0   cobalt                              0x00000001094f07b8 _Z15printStackTracev + 60
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 1   cobalt                              0x00000001094f0ca4 _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilderC2ERKNS0_9starboard5media15VideoStreamInfoE + 784
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 2   cobalt                              0x00000001094f1bd0 _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilderC1ERKNS0_9starboard5media15VideoStreamInfoE + 36
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 3   cobalt                              0x00000001094e7da8 _ZN9starboard6shared5uikit26AVVideoSampleBufferBuilder13CreateBuilderERKNS0_9starboard5media15VideoStreamInfoE + 172
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 4   cobalt                              0x00000001094d4f30 _ZN9starboard6shared5uikit17AVSBVideoRendererC2ERKNS0_9starboard5media15VideoStreamInfoEP18SbDrmSystemPrivate + 284
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 5   cobalt                              0x00000001094d6190 _ZN9starboard6shared5uikit17AVSBVideoRendererC1ERKNS0_9starboard5media15VideoStreamInfoEP18SbDrmSystemPrivate + 44
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 6   cobalt                              0x00000001095291ac _ZN9starboard6shared9starboard6player6filter12_GLOBAL__N_123PlayerComponentsFactory24CreatePunchoutComponentsERKNS3_16PlayerComponents7Factory18CreationParametersEPNSt2Cr12basic_stringIcNSB_11char_traitsIcEENSB_9allocatorIcEEEE + 632
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 7   cobalt                              0x00000001095283a0 _ZN9starboard6shared9starboard6player6filter12_GLOBAL__N_123PlayerComponentsFactory16CreateComponentsERKNS3_16PlayerComponents7Factory18CreationParametersEPNSt2Cr12basic_stringIcNSB_11char_traitsIcEENSB_9allocatorIcEEEE + 92
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 8   cobalt                              0x000000010954c4bc _ZN9starboard6shared9starboard6player6filter30FilterBasedPlayerWorkerHandler4InitEP15SbPlayerPrivateNSt2Cr8functionIFvxibEEENS8_IF13SbPlayerStatevEEENS8_IFvSB_EEENS8_IFv13SbPlayerErrorRKNS7_12basic_stringIcNS7_11char_traitsIcEENS7_9allocatorIcEEEEEEE + 1584
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 9   cobalt                              0x0000000109532198 _ZN9starboard6shared9starboard6player12PlayerWorker6DoInitEv + 680
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 10  cobalt                              0x0000000109531ec0 _ZN9starboard6shared9starboard6player12PlayerWorker7RunLoopEv + 180
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 11  cobalt                              0x00000001095319c8 _ZN9starboard6shared9starboard6player12PlayerWorker16ThreadEntryPointEPv + 292
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 12  libsystem_pthread.dylib             0x00000001342465f0 _pthread_start + 104
+2025-09-24 17:32:44.409 cobalt[29994:13513736] 13  libsystem_pthread.dylib             0x0000000134241998 thread_start + 8
+[player_worker/16647:0924/120244.412083(UTC):INFO:filter_based_player_worker_handler.cc(171)] Set playback rate to 1
+[player_worker/16647:0924/120244.412153(UTC):INFO:filter_based_player_worker_handler.cc(174)] Initialize video renderer.
+[player_worker/16647:0924/120244.412228(UTC):INFO:filter_based_player_worker_handler.cc(362)] Set playback rate from 1 to 0, and media time provider is 0x600003028c60
+[29994:73987:0924/173244.412261:INFO:starboard_renderer.cc(894)] StarboardRenderer::OnPlayerStatus() called with kSbPlayerStateInitialized
+[player_worker/16647:0924/120244.412304(UTC):INFO:filter_based_player_worker_handler.cc(380)] Set volume from 1 to 1, and audio renderer is 0x0
+[player_worker/16647:0924/120244.412333(UTC):INFO:filter_based_player_worker_handler.cc(362)] Set playback rate from 0 to 1, and media time provider is 0x600003028c60
+[29994:73987:0924/173244.412345:INFO:starboard_renderer.cc(329)] StarboardRenderer::StartPlayingFrom() called with 0 s.
+[player_worker/16647:0924/120244.412402(UTC):INFO:filter_based_player_worker_handler.cc(398)] Set bounds to x: 1509, y: 463, width: 746, height: 420, z_index: 0
+[player_worker/16647:0924/120244.412896(UTC):INFO:filter_based_player_worker_handler.cc(362)] Set playback rate from 1 to 0, and media time provider is 0x600003028c60
+[player_worker/16647:0924/120244.412960(UTC):INFO:filter_based_player_worker_handler.cc(193)] Seek to 0, and media time provider is 0x600003028c60
+[player_worker/16647:0924/120244.413150(UTC):INFO:filter_based_player_worker_handler.cc(362)] Set playback rate from 0 to 1, and media time provider is 0x600003028c60
+[29994:73987:0924/173244.413166:INFO:starboard_renderer.cc(894)] StarboardRenderer::OnPlayerStatus() called with kSbPlayerStatePrerolling
+[vpx_video_decoder/118019:0924/120244.413523(UTC):INFO:vp9_sw_av_video_sample_buffer_builder.mm(749)] [ABHIJEET] : DecodeOneBuffer()
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 0   cobalt                              0x00000001094f07b8 _Z15printStackTracev + 60
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 1   cobalt                              0x00000001094f301c _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilder15DecodeOneBufferEv + 416
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 2   cobalt                              0x00000001094df600 _ZNSt2Cr8__invokeIRMN9starboard6shared5uikit17AVSBVideoRendererEFvvERPS4_JEvEEDTcldsdeclsr3stdE7declvalIT0_EEclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT1_EEEEOSB_OSA_DpOSC_ + 116
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 3   cobalt                              0x00000001094df580 _ZNSt2Cr15__apply_functorIMN9starboard6shared5uikit17AVSBVideoRendererEFvvENS_5tupleIJPS4_EEEJLm0EENS7_IJEEEEENS_13__bind_returnIT_T0_T2_Xsr22__is_valid_bind_returnISC_SD_SE_EE5valueEE4typeERSC_RSD_NS_15__tuple_indicesIJXspT1_EEEEOSE_ + 60
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 4   cobalt                              0x00000001094df538 _ZNSt2Cr6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS4_EEclIJEEENS_13__bind_returnIS6_NS_5tupleIJS7_EEENSB_IJDpOT_EEEXsr22__is_valid_bind_returnIS6_SC_SG_EE5valueEE4typeESF_ + 32
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 5   cobalt                              0x00000001094df50c _ZNSt2Cr8__invokeIRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS5_EEEJEEEDTclclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT0_EEEEOSB_DpOSC_ + 24
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 6   cobalt                              0x00000001094df4e8 _ZNSt2Cr28__invoke_void_return_wrapperIvLb1EE6__callIJRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS7_EEEEEEvDpOT_ + 24
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 7   cobalt                              0x00000001094df4c4 _ZNSt2Cr10__function20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS6_EEEFvvEEclEv + 24
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 8   cobalt                              0x00000001094df4a0 _ZNSt2Cr10__function16__policy_invokerIFvvEE11__call_implINS0_20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPSA_EEES2_EEEEvPKNS0_16__policy_storageE + 44
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 9   cobalt                              0x0000000102a493d8 _ZNKSt2Cr10__function13__policy_funcIFvvEEclEv + 28
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 10  cobalt                              0x0000000102a492c0 _ZNKSt2Cr8functionIFvvEEclEv + 24
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 11  cobalt                              0x000000010950a2c4 _ZN9starboard6shared9starboard6player8JobQueue14TryToRunOneJobEb + 992
+2025-09-24 17:32:44.489 cobalt[29994:13513740] 12  cobalt                              0x0000000109509ecc _ZN9starboard6shared9starboard6player8JobQueue15RunUntilStoppedEv + 272
+2025-09-24 17:32:44.490 cobalt[29994:13513740] 13  cobalt                              0x000000010950bd90 _ZN9starboard6shared9starboard6player9JobThread7RunLoopEv + 188
+2025-09-24 17:32:44.490 cobalt[29994:13513740] 14  cobalt                              0x000000010950b960 _ZN9starboard6shared9starboard6player9JobThread16ThreadEntryPointEPv + 300
+2025-09-24 17:32:44.490 cobalt[29994:13513740] 15  libsystem_pthread.dylib             0x00000001342465f0 _pthread_start + 104
+2025-09-24 17:32:44.490 cobalt[29994:13513740] 16  libsystem_pthread.dylib             0x0000000134241998 thread_start + 8
+[vpx_video_decoder/118019:0924/120244.490147(UTC):INFO:vp9_sw_av_video_sample_buffer_builder.mm(683)] [ABHIJEET] : InitializeCodec() for 426x240
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 0   cobalt                              0x00000001094f07b8 _Z15printStackTracev + 60
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 1   cobalt                              0x00000001094f472c _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilder15InitializeCodecEv + 272
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 2   cobalt                              0x00000001094f3458 _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilder15DecodeOneBufferEv + 1500
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 3   cobalt                              0x00000001094df600 _ZNSt2Cr8__invokeIRMN9starboard6shared5uikit17AVSBVideoRendererEFvvERPS4_JEvEEDTcldsdeclsr3stdE7declvalIT0_EEclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT1_EEEEOSB_OSA_DpOSC_ + 116
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 4   cobalt                              0x00000001094df580 _ZNSt2Cr15__apply_functorIMN9starboard6shared5uikit17AVSBVideoRendererEFvvENS_5tupleIJPS4_EEEJLm0EENS7_IJEEEEENS_13__bind_returnIT_T0_T2_Xsr22__is_valid_bind_returnISC_SD_SE_EE5valueEE4typeERSC_RSD_NS_15__tuple_indicesIJXspT1_EEEEOSE_ + 60
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 5   cobalt                              0x00000001094df538 _ZNSt2Cr6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS4_EEclIJEEENS_13__bind_returnIS6_NS_5tupleIJS7_EEENSB_IJDpOT_EEEXsr22__is_valid_bind_returnIS6_SC_SG_EE5valueEE4typeESF_ + 32
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 6   cobalt                              0x00000001094df50c _ZNSt2Cr8__invokeIRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS5_EEEJEEEDTclclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT0_EEEEOSB_DpOSC_ + 24
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 7   cobalt                              0x00000001094df4e8 _ZNSt2Cr28__invoke_void_return_wrapperIvLb1EE6__callIJRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS7_EEEEEEvDpOT_ + 24
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 8   cobalt                              0x00000001094df4c4 _ZNSt2Cr10__function20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS6_EEEFvvEEclEv + 24
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 9   cobalt                              0x00000001094df4a0 _ZNSt2Cr10__function16__policy_invokerIFvvEE11__call_implINS0_20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPSA_EEES2_EEEEvPKNS0_16__policy_storageE + 44
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 10  cobalt                              0x0000000102a493d8 _ZNKSt2Cr10__function13__policy_funcIFvvEEclEv + 28
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 11  cobalt                              0x0000000102a492c0 _ZNKSt2Cr8functionIFvvEEclEv + 24
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 12  cobalt                              0x000000010950a2c4 _ZN9starboard6shared9starboard6player8JobQueue14TryToRunOneJobEb + 992
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 13  cobalt                              0x0000000109509ecc _ZN9starboard6shared9starboard6player8JobQueue15RunUntilStoppedEv + 272
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 14  cobalt                              0x000000010950bd90 _ZN9starboard6shared9starboard6player9JobThread7RunLoopEv + 188
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 15  cobalt                              0x000000010950b960 _ZN9starboard6shared9starboard6player9JobThread16ThreadEntryPointEPv + 300
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 16  libsystem_pthread.dylib             0x00000001342465f0 _pthread_start + 104
+2025-09-24 17:32:44.568 cobalt[29994:13513740] 17  libsystem_pthread.dylib             0x0000000134241998 thread_start + 8
+[player_worker/16647:0924/120244.586295(UTC):INFO:filter_based_player_worker_handler.cc(443)] Video prerolled.
+[29994:73987:0924/173244.586375:INFO:sbplayer_bridge.cc(1385)] 
+SbPlayer startup latencies: 395870 us
+  Event name                              time since last event
+  SbPlayerCreate() called                 0 us
+  kSbPlayerStateInitialized received      221756 us
+  kSbPlayerStatePrerolling received       911 us
+  First media sample(s) written [a/v]     0/250 us
+  kSbPlayerStatePresenting received       172953 us
+  Startup latency statistics (us):        min: 0, median: 0, average: 0, max: 0
+[29994:73987:0924/173244.586453:INFO:starboard_renderer.cc(894)] StarboardRenderer::OnPlayerStatus() called with kSbPlayerStatePresenting
+[29994:73987:0924/173244.586512:INFO:starboard_renderer.cc(59)] Encountered local audio connector: unknown
+[29994:73987:0924/173244.586598:INFO:starboard_renderer.cc(72)] No remote audio outputs found.
+[29994:73987:0924/173244.586655:INFO:starboard_renderer.cc(928)] Audio write duration is 1 s
+[29994:259:0924/173244.731067:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 0.14 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173244.996513:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 0.41 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173245.263475:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 0.68 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173245.527615:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 0.94 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173245.792678:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 1.21 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173246.056019:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 1.47 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[vpx_video_decoder/118019:0924/120246.073288(UTC):INFO:vp9_sw_av_video_sample_buffer_builder.mm(749)] [ABHIJEET] : DecodeOneBuffer()
+2025-09-24 17:32:46.153 cobalt[29994:13513740] 0   cobalt                              0x00000001094f07b8 _Z15printStackTracev + 60
+2025-09-24 17:32:46.153 cobalt[29994:13513740] 1   cobalt                              0x00000001094f301c _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilder15DecodeOneBufferEv + 416
+2025-09-24 17:32:46.153 cobalt[29994:13513740] 2   cobalt                              0x00000001094df600 _ZNSt2Cr8__invokeIRMN9starboard6shared5uikit17AVSBVideoRendererEFvvERPS4_JEvEEDTcldsdeclsr3stdE7declvalIT0_EEclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT1_EEEEOSB_OSA_DpOSC_ + 116
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 3   cobalt                              0x00000001094df580 _ZNSt2Cr15__apply_functorIMN9starboard6shared5uikit17AVSBVideoRendererEFvvENS_5tupleIJPS4_EEEJLm0EENS7_IJEEEEENS_13__bind_returnIT_T0_T2_Xsr22__is_valid_bind_returnISC_SD_SE_EE5valueEE4typeERSC_RSD_NS_15__tuple_indicesIJXspT1_EEEEOSE_ + 60
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 4   cobalt                              0x00000001094df538 _ZNSt2Cr6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS4_EEclIJEEENS_13__bind_returnIS6_NS_5tupleIJS7_EEENSB_IJDpOT_EEEXsr22__is_valid_bind_returnIS6_SC_SG_EE5valueEE4typeESF_ + 32
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 5   cobalt                              0x00000001094df50c _ZNSt2Cr8__invokeIRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS5_EEEJEEEDTclclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT0_EEEEOSB_DpOSC_ + 24
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 6   cobalt                              0x00000001094df4e8 _ZNSt2Cr28__invoke_void_return_wrapperIvLb1EE6__callIJRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS7_EEEEEEvDpOT_ + 24
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 7   cobalt                              0x00000001094df4c4 _ZNSt2Cr10__function20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS6_EEEFvvEEclEv + 24
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 8   cobalt                              0x00000001094df4a0 _ZNSt2Cr10__function16__policy_invokerIFvvEE11__call_implINS0_20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPSA_EEES2_EEEEvPKNS0_16__policy_storageE + 44
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 9   cobalt                              0x0000000102a493d8 _ZNKSt2Cr10__function13__policy_funcIFvvEEclEv + 28
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 10  cobalt                              0x0000000102a492c0 _ZNKSt2Cr8functionIFvvEEclEv + 24
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 11  cobalt                              0x000000010950a2c4 _ZN9starboard6shared9starboard6player8JobQueue14TryToRunOneJobEb + 992
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 12  cobalt                              0x0000000109509ecc _ZN9starboard6shared9starboard6player8JobQueue15RunUntilStoppedEv + 272
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 13  cobalt                              0x000000010950bd90 _ZN9starboard6shared9starboard6player9JobThread7RunLoopEv + 188
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 14  cobalt                              0x000000010950b960 _ZN9starboard6shared9starboard6player9JobThread16ThreadEntryPointEPv + 300
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 15  libsystem_pthread.dylib             0x00000001342465f0 _pthread_start + 104
+2025-09-24 17:32:46.154 cobalt[29994:13513740] 16  libsystem_pthread.dylib             0x0000000134241998 thread_start + 8
+[29994:259:0924/173246.322475:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 1.74 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173246.589242:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 2 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173246.857077:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 2.27 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173247.122730:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 2.54 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173247.388555:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 2.8 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173247.652201:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 3.07 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173247.919174:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 3.33 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173248.185769:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 3.6 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173248.447062:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 3.86 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173248.713173:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 4.13 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173248.980166:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 4.39 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173249.247096:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 4.66 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[vpx_video_decoder/118019:0924/120249.415897(UTC):INFO:vp9_sw_av_video_sample_buffer_builder.mm(749)] [ABHIJEET] : DecodeOneBuffer()
+2025-09-24 17:32:49.505 cobalt[29994:13513740] 0   cobalt                              0x00000001094f07b8 _Z15printStackTracev + 60
+2025-09-24 17:32:49.505 cobalt[29994:13513740] 1   cobalt                              0x00000001094f301c _ZN9starboard6shared5uikit31Vp9SwAVVideoSampleBufferBuilder15DecodeOneBufferEv + 416
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 2   cobalt                              0x00000001094df600 _ZNSt2Cr8__invokeIRMN9starboard6shared5uikit17AVSBVideoRendererEFvvERPS4_JEvEEDTcldsdeclsr3stdE7declvalIT0_EEclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT1_EEEEOSB_OSA_DpOSC_ + 116
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 3   cobalt                              0x00000001094df580 _ZNSt2Cr15__apply_functorIMN9starboard6shared5uikit17AVSBVideoRendererEFvvENS_5tupleIJPS4_EEEJLm0EENS7_IJEEEEENS_13__bind_returnIT_T0_T2_Xsr22__is_valid_bind_returnISC_SD_SE_EE5valueEE4typeERSC_RSD_NS_15__tuple_indicesIJXspT1_EEEEOSE_ + 60
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 4   cobalt                              0x00000001094df538 _ZNSt2Cr6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS4_EEclIJEEENS_13__bind_returnIS6_NS_5tupleIJS7_EEENSB_IJDpOT_EEEXsr22__is_valid_bind_returnIS6_SC_SG_EE5valueEE4typeESF_ + 32
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 5   cobalt                              0x00000001094df50c _ZNSt2Cr8__invokeIRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS5_EEEJEEEDTclclsr3stdE7declvalIT_EEspclsr3stdE7declvalIT0_EEEEOSB_DpOSC_ + 24
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 6   cobalt                              0x00000001094df4e8 _ZNSt2Cr28__invoke_void_return_wrapperIvLb1EE6__callIJRNS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS7_EEEEEEvDpOT_ + 24
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 7   cobalt                              0x00000001094df4c4 _ZNSt2Cr10__function20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPS6_EEEFvvEEclEv + 24
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 8   cobalt                              0x00000001094df4a0 _ZNSt2Cr10__function16__policy_invokerIFvvEE11__call_implINS0_20__default_alloc_funcINS_6__bindIMN9starboard6shared5uikit17AVSBVideoRendererEFvvEJPSA_EEES2_EEEEvPKNS0_16__policy_storageE + 44
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 9   cobalt                              0x0000000102a493d8 _ZNKSt2Cr10__function13__policy_funcIFvvEEclEv + 28
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 10  cobalt                              0x0000000102a492c0 _ZNKSt2Cr8functionIFvvEEclEv + 24
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 11  cobalt                              0x000000010950a2c4 _ZN9starboard6shared9starboard6player8JobQueue14TryToRunOneJobEb + 992
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 12  cobalt                              0x0000000109509ecc _ZN9starboard6shared9starboard6player8JobQueue15RunUntilStoppedEv + 272
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 13  cobalt                              0x000000010950bd90 _ZN9starboard6shared9starboard6player9JobThread7RunLoopEv + 188
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 14  cobalt                              0x000000010950b960 _ZN9starboard6shared9starboard6player9JobThread16ThreadEntryPointEPv + 300
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 15  libsystem_pthread.dylib             0x00000001342465f0 _pthread_start + 104
+2025-09-24 17:32:49.506 cobalt[29994:13513740] 16  libsystem_pthread.dylib             0x0000000134241998 thread_start + 8
+[29994:259:0924/173249.513313:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 4.93 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173249.779748:INFO:CONSOLE(22638)] "PlaybackOnlyVP9Video:  video.currentTime = 5.19 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173249.780151:INFO:CONSOLE(22638)] "TestExecutor:  Test 72:PlaybackOnlyVP9Video PASSED. ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173249.780359:INFO:CONSOLE(22638)] "TestExecutor:  New longest test PlaybackOnlyVP9Video with timeout 60000 takes 7204 ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:73987:0924/173249.781157:INFO:starboard_renderer.cc(379)] StarboardRenderer changes playback rate from 1 to 0.
+[player_worker/16647:0924/120249.781228(UTC):INFO:filter_based_player_worker_handler.cc(362)] Set playback rate from 1 to 0, and media time provider is 0x600003028c60
+[29994:73987:0924/173249.782257:INFO:starboard_renderer.cc(153)] Destructing StarboardRenderer.
+[ThreadPoolSingleThreadSharedForeground0/73987:0924/120249.782341(UTC):INFO:player_internal.cc(255)] Destroying SbPlayerPrivateImpl. There are 0 players.
+[ThreadPoolSingleThreadSharedForeground0/73987:0924/120249.782381(UTC):INFO:player_worker.cc(91)] Instance of PlayerWorker is released. We have 1 instances in total.
+[player_worker/16647:0924/120249.782442(UTC):INFO:filter_based_player_worker_handler.cc(512)] FilterBasedPlayerWorkerHandler stopped.
+[29994:259:0924/173249.784664:INFO:CONSOLE(22638)] "TestExecutor:  Longest test is PlaybackOnlyVP9Video, it takes 0.12006666666666667 of its timeout. ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173249.786862:INFO:CONSOLE(22638)] "TestExecutor:  All tests are completed ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:259:0924/173249.786962:INFO:CONSOLE(22638)] "TestExecutor:  [PLEASE VERIFY]Device Status: {HDR: false}, {WebSpeech: false}. ", source: https://ytlr-cert.appspot.com/2021/yts.js (22638)
+[29994:73987:0924/173249.794157:INFO:decoder_buffer_allocator.cc(148)] Freed 22020096 bytes of media buffer pool `on demand`.
+[29994:73987:0924/173249.794299:INFO:starboard_renderer.cc(157)] SbPlayerBridge destructed.

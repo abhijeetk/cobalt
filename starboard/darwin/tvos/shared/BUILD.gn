@@ -406,8 +406,6 @@ static_library("starboard_platform") {
   if (is_internal_build) {
     sources -= [ "//starboard/shared/uikit/drm_system_platform.mm" ]
     sources += internal_uikit_sources
-    public_deps +=
-        [ "//internal/starboard/private/shared/stub:private_sources" ]
   }
 
   deps = [

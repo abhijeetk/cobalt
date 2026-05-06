@@ -118,20 +118,26 @@ SbPlayerBridge::SbPlayerBridge(
     bool allow_resume_after_suspend,
     SbPlayerOutputMode default_output_mode,
     const OnEncryptedMediaInitDataEncounteredCB&
-        on_encrypted_media_init_data_encountered_cb,
-    std::string pipeline_identifier)
-    : url_(url),
+        on_encrypted_media_init_data_encountered_cb
+#if BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
+    ,
+    std::string pipeline_identifier
+#endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
+    )
+    : on_encrypted_media_init_data_encountered_cb_(
+          on_encrypted_media_init_data_encountered_cb),
+      url_(url),
       sbplayer_interface_(interface),
       task_runner_(task_runner),
       window_(window),
       host_(host),
 #if COBALT_MEDIA_ENABLE_SUSPEND_RESUME
       allow_resume_after_suspend_(allow_resume_after_suspend),
-#endif
-      on_encrypted_media_init_data_encountered_cb_(
-          on_encrypted_media_init_data_encountered_cb),
+#endif  // COBALT_MEDIA_ENABLE_SUSPEND_RESUME
+#if BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
       cval_stats_(&interface->cval_stats_),
       pipeline_identifier_(pipeline_identifier),
+#endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
       is_url_based_(true) {
   DCHECK(host_);
 
@@ -193,11 +199,12 @@ SbPlayerBridge::SbPlayerBridge(
       cval_stats_(&interface->cval_stats_),
       pipeline_identifier_(pipeline_identifier),
 #endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
-#if SB_HAS(PLAYER_WITH_URL)
-      is_url_based_(false),
-#endif  // SB_HAS(PLAYER_WITH_URL
       max_video_capabilities_(max_video_capabilities),
       experimental_features_(experimental_features)
+#if SB_HAS(PLAYER_WITH_URL)
+      ,
+      is_url_based_(false)
+#endif  // SB_HAS(PLAYER_WITH_URL)
 #if BUILDFLAG(IS_ANDROID)
       ,
       surface_view_(surface_view)
@@ -448,11 +455,10 @@ void SbPlayerBridge::GetUrlPlayerBufferedTimeRanges(
 
   if (buffer_start_time) {
     *buffer_start_time =
-        TimeDelta::FromMicroseconds(url_player_info.buffer_start_timestamp);
+        base::Microseconds(url_player_info.buffer_start_timestamp);
   }
   if (buffer_length_time) {
-    *buffer_length_time =
-        TimeDelta::FromMicroseconds(url_player_info.buffer_duration);
+    *buffer_length_time = base::Microseconds(url_player_info.buffer_duration);
   }
 }
 
@@ -494,7 +500,7 @@ TimeDelta SbPlayerBridge::GetDuration() {
     // URL-based player may not have loaded asset yet, so map no duration to 0.
     return TimeDelta();
   }
-  return TimeDelta::FromMicroseconds(info.duration);
+  return base::Microseconds(info.duration);
 }
 
 TimeDelta SbPlayerBridge::GetStartDate() {
@@ -508,7 +514,7 @@ TimeDelta SbPlayerBridge::GetStartDate() {
 
   SbPlayerInfo info;
   sbplayer_interface_->GetInfo(player_, &info);
-  return TimeDelta::FromMicroseconds(info.start_date);
+  return base::Microseconds(info.start_date);
 }
 
 void SbPlayerBridge::SetDrmSystem(SbDrmSystem drm_system) {
@@ -598,24 +604,30 @@ void SbPlayerBridge::EncryptedMediaInitDataEncounteredCB(
 }
 
 void SbPlayerBridge::CreateUrlPlayer(const std::string& url) {
-  TRACE_EVENT0("cobalt::media", "SbPlayerBridge::CreateUrlPlayer");
+  TRACE_EVENT0("media", "SbPlayerBridge::CreateUrlPlayer");
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   DCHECK(!on_encrypted_media_init_data_encountered_cb_.is_null());
   LOG(INFO) << "CreateUrlPlayer passed url " << url;
 
+#if BUILDFLAG(COBALT_MEDIA_ENABLE_FORMAT_SUPPORT_QUERY_METRICS)
   if (max_video_capabilities_.empty()) {
     FormatSupportQueryMetrics::PrintAndResetMetrics();
   }
+#endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_FORMAT_SUPPORT_QUERY_METRICS)
 
   player_creation_time_ = Time::Now();
 
+#if BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
   cval_stats_->StartTimer(MediaTiming::SbPlayerCreate, pipeline_identifier_);
+#endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
   player_ = sbplayer_interface_->CreateUrlPlayer(
       url.c_str(), window_, &SbPlayerBridge::PlayerStatusCB,
       &SbPlayerBridge::EncryptedMediaInitDataEncounteredCB,
       &SbPlayerBridge::PlayerErrorCB, this);
+#if BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
   cval_stats_->StopTimer(MediaTiming::SbPlayerCreate, pipeline_identifier_);
+#endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
   DCHECK(SbPlayerIsValid(player_));
 
   if (output_mode_ == kSbPlayerOutputModeDecodeToTexture) {

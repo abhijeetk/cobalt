@@ -222,6 +222,7 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
      encryptedMediaCallback:
          (SbPlayerEncryptedMediaInitDataEncounteredCB)encryptedMediaCallback
             playerErrorFunc:(SbPlayerErrorFunc)errorFunc {
+  NSLog(@"[AVPlayer] initWithUrl: %@", url);
   if (self) {
     _url = url;
     _playerContext = playerContext;
@@ -235,17 +236,23 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
     _insufficientExternalProtection = false;
 
     CGRect frame = [UIScreen mainScreen].bounds;
+    NSLog(@"[AVPlayer] Creating playerView with frame: %@",
+          NSStringFromCGRect(frame));
     _playerView = [[SBDPlayerView alloc] initWithFrame:frame];
 
     _pendingKeyRequests = [NSMutableArray array];
 
 #if TARGET_OS_EMBEDDED
+    NSLog(@"[AVPlayer] Creating AVContentKeySession for FairPlay.");
     _keySession = [AVContentKeySession
         contentKeySessionWithKeySystem:AVContentKeySystemFairPlayStreaming];
     [_keySession setDelegate:self
                        queue:dispatch_queue_create("keySessionQueue", NULL)];
+#else
+    NSLog(@"[AVPlayer] TARGET_OS_EMBEDDED not set, skipping key session.");
 #endif  // TARGET_OS_EMBEDDED
 
+    NSLog(@"[AVPlayer] Calling updatePlayerState:kSbPlayerStateInitialized");
     [self updatePlayerState:kSbPlayerStateInitialized];
 
     [[NSNotificationCenter defaultCenter]
@@ -303,6 +310,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)startPlaybackAtTime:(NSInteger)startTime {
+  NSLog(@"[AVPlayer] startPlaybackAtTime: %ld loadedTracks=%d", (long)startTime,
+        _loadedTracks);
   if (_loadedTracks) {
     return;
   }
@@ -333,6 +342,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)assetTracksLoadedForAsset:(AVURLAsset*)URLAsset {
+  NSLog(@"[AVPlayer] assetTracksLoadedForAsset: tracks=%lu",
+        (unsigned long)URLAsset.tracks.count);
   if (_destroyCalled) {
     return;
   }
@@ -379,6 +390,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)playerItemStatusDidChange {
+  NSLog(@"[AVPlayer] playerItemStatusDidChange: status=%ld",
+        (long)_player.currentItem.status);
   switch (_player.currentItem.status) {
     case AVPlayerItemStatusReadyToPlay: {
       dispatch_async(dispatch_get_main_queue(), ^{
@@ -387,6 +400,11 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
           self->_playbackStartTime = 0;
         } else {
           [self updatePlayerState:kSbPlayerStatePresenting];
+        }
+        // Start playback once ready.
+        if (!self->_playerShouldPause) {
+          NSLog(@"[AVPlayer] ReadyToPlay — calling [player play]");
+          [self->_player play];
         }
       });
       return;
@@ -651,6 +669,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)updatePlayerState:(SbPlayerState)state {
+  NSLog(@"[AVPlayer] updatePlayerState: %d (destroy=%d callbacks=%d)", state,
+        _destroyCalled, _callbacksEnabled);
   if (_destroyCalled) {
     return;
   }

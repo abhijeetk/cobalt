@@ -44,9 +44,7 @@ SbPlayer SbUrlPlayerCreate(const char* url,
               encryptedMediaCallback:encrypted_media_init_data_encountered_cb
                      playerErrorFunc:player_error_func];
 
-    // Attach the player view to the application's view hierarchy.
-    [application attachPlayerView:[player view]];
-
+    // Note: playerWithUrl: already calls attachPlayerView internally.
     return [playerManager starboardPlayerForApplicationPlayer:player];
   }
 }

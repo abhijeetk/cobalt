@@ -27,6 +27,28 @@ config("disable_unreachable_warnings") {
   ]
 }
 
+source_set("url_player_demuxer") {
+  visibility = [
+    "//media",
+    "//media/filters",
+    "//media/starboard",
+  ]
+
+  sources = [
+    "url_player_demuxer.cc",
+    "url_player_demuxer.h",
+  ]
+
+  deps = [
+    "//base",
+    "//media:media_buildflags",
+    "//media/base",
+    "//url",
+  ]
+
+  configs += [ "//media:subcomponent_config" ]
+}
+
 source_set("starboard") {
   visibility = [ "//media" ]
 
@@ -57,7 +79,10 @@ source_set("starboard") {
       "starboard_utils.h",
     ]
 
-    deps += [ ":buildflags" ]
+    deps += [
+      ":buildflags",
+      ":url_player_demuxer",
+    ]
   }
 
   deps += [

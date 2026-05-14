@@ -11,6 +11,10 @@
 #include "base/time/time.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
+#include "media/media_buildflags.h"
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+#include "url/gurl.h"
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
 namespace media {
 
@@ -41,6 +45,11 @@ class MEDIA_EXPORT MediaResource {
   // A helper function that return the first stream of the given `type` if one
   // exists or a null pointer if there is no streams of that type.
   DemuxerStream* GetFirstStream(DemuxerStream::Type type);
+
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  // Returns the media URL for URL-based players (e.g., HLS via AVPlayer).
+  virtual GURL GetMediaUrl() const;
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 };
 
 }  // namespace media

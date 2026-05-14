@@ -112,6 +112,9 @@ class MEDIA_EXPORT StarboardRendererClient
   void RequestOverlayInfo(bool restart_for_transitions) override;
 #endif  // BUILDFLAG(IS_ANDROID)
 
+  // Set the source URL for URL-based player (HLS via AVPlayer).
+  void SetSourceUrl(const std::string& source_url);
+
  private:
   void OnConnectionError();
   void InitAndBindMojoRenderer(base::OnceClosure complete_cb);
@@ -154,6 +157,9 @@ class MEDIA_EXPORT StarboardRendererClient
 #endif  // BUILDFLAG(IS_ANDROID)
 
   mojo::Remote<RendererExtension> renderer_extension_;
+  // Source URL for URL-based player (HLS). Stored when SetSourceUrl() is
+  // called before Mojo pipes are bound, then sent after binding.
+  std::string source_url_;
 
   raw_ptr<RendererClient> client_ = nullptr;
   PipelineStatusCallback init_cb_;

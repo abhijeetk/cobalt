@@ -24,6 +24,7 @@
 #include "media/renderers/video_overlay_factory.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "url/gurl.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/task/bind_post_task.h"
@@ -264,6 +265,17 @@ void StarboardRendererClient::GetSbWindowHandle() {
   renderer_extension_->OnSbWindowHandleReady(sb_window_handle);
 }
 
+void StarboardRendererClient::SetSourceUrl(const std::string& source_url) {
+  // SetSourceUrl may be called from the main thread (CreateRenderer) before
+  // the media task runner has initialized the Mojo pipes. Store the URL and
+  // it will be sent when the renderer extension is bound.
+  source_url_ = source_url;
+  if (media_task_runner_->RunsTasksInCurrentSequence() &&
+      renderer_extension_.is_bound()) {
+    renderer_extension_->SetSourceUrl(source_url);
+  }
+}
+
 #if BUILDFLAG(IS_ANDROID)
 void StarboardRendererClient::RequestOverlayInfo(bool restart_for_transitions) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
@@ -298,6 +310,12 @@ void StarboardRendererClient::InitAndBindMojoRenderer(
 
   renderer_extension_.set_disconnect_handler(base::BindOnce(
       &StarboardRendererClient::OnConnectionError, base::Unretained(this)));
+
+  // Send stored source URL if one was set before binding.
+  if (!source_url_.empty()) {
+    LOG(INFO) << "Sending stored source URL over Mojo: " << source_url_;
+    renderer_extension_->SetSourceUrl(source_url_);
+  }
 
   // Generate |command_buffer_id|.
   mojom::CommandBufferIdPtr command_buffer_id;
@@ -334,6 +352,18 @@ void StarboardRendererClient::InitializeMojoRenderer(
     PipelineStatusCallback init_cb) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(AreMojoPipesConnected());
+
+  // Extract HLS URL from MediaResource (carried by UrlPlayerDemuxer).
+  // Mojo messages on same pipe are ordered, so SetSourceUrl arrives
+  // at StarboardRenderer before Initialize.
+  GURL url = media_resource->GetMediaUrl();
+  LOG(INFO) << "[URL-ROUTING] StarboardRendererClient::InitializeMojoRenderer"
+            << " GetMediaUrl()=" << url.spec() << " valid=" << url.is_valid();
+  if (url.is_valid()) {
+    LOG(INFO) << "[URL-ROUTING] Sending SetSourceUrl via Mojo: " << url.spec();
+    renderer_extension_->SetSourceUrl(url.spec());
+  }
+
   MojoRendererWrapper::Initialize(media_resource, client, std::move(init_cb));
 }
 

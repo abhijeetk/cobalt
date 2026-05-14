@@ -967,6 +967,22 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
     return;
   }
 
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  // Short circuit for HLS URLs on Starboard platforms. Skip data source
+  // creation and go straight to StartPipeline(). The UrlPlayerDemuxer stub
+  // in DemuxerManager::CreateDemuxer() will handle the demuxer requirement.
+  {
+    const std::string& spec = demuxer_manager_->LoadedUrl().spec();
+    if (spec.find("hls_variant") != std::string::npos ||
+        spec.find("hls_playlist") != std::string::npos ||
+        spec.find(".m3u8") != std::string::npos) {
+      LOG(INFO) << "HLS URL detected in DoLoad, skipping data source.";
+      StartPipeline();
+      return;
+    }
+  }
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
+
   // Short circuit the more complex loading path for data:// URLs. Sending
   // them through the network based loading path just wastes memory and causes
   // worse performance since reads become asynchronous.

@@ -327,6 +327,13 @@ void StarboardRendererWrapper::OnSbWindowHandleReady(
   GetRenderer()->OnSbWindowHandleReady(sb_window_handle);
 }
 
+void StarboardRendererWrapper::SetSourceUrl(const std::string& source_url) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  LOG(INFO) << "[URL-ROUTING] StarboardRendererWrapper::SetSourceUrl: "
+            << source_url;
+  GetRenderer()->SetSourceUrl(source_url);
+}
+
 #if BUILDFLAG(IS_ANDROID)
 void StarboardRendererWrapper::OnOverlayInfoChanged(
     const OverlayInfo& overlay_info) {

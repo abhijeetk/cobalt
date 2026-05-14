@@ -19,6 +19,9 @@
 #include "media/base/media_switches.h"
 #include "media/filters/chunk_demuxer.h"
 #include "media/filters/ffmpeg_demuxer.h"
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+#include "media/starboard/url_player_demuxer.h"
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 #include "net/storage_access_api/status.h"
 #include "url/gurl.h"
 
@@ -347,8 +350,20 @@ PipelineStatus DemuxerManager::CreateDemuxer(
 #if BUILDFLAG(ENABLE_FFMPEG)
     SetDemuxer(CreateFFmpegDemuxer());
 #elif BUILDFLAG(USE_STARBOARD_MEDIA)
-    LOG(INFO) << "Progressive streams are unsupported.";
-    return DEMUXER_ERROR_NO_SUPPORTED_STREAMS;
+    {
+      const std::string& spec = loaded_url_.spec();
+      if (spec.find("hls_variant") != std::string::npos ||
+          spec.find("hls_playlist") != std::string::npos ||
+          spec.find(".m3u8") != std::string::npos) {
+        LOG(INFO) << "[URL-ROUTING] DemuxerManager::CreateDemuxer — "
+                  << "creating UrlPlayerDemuxer with URL: "
+                  << loaded_url_.spec();
+        SetDemuxer(std::make_unique<UrlPlayerDemuxer>(loaded_url_));
+      } else {
+        LOG(INFO) << "Progressive streams are unsupported.";
+        return DEMUXER_ERROR_NO_SUPPORTED_STREAMS;
+      }
+    }
 #else
     return DEMUXER_ERROR_PROGRESSIVE_DISABLED;
 #endif
@@ -417,8 +432,7 @@ void DemuxerManager::OnDataSourcePlaybackRateChange(double rate, bool paused) {
   }
 }
 
-void DemuxerManager::DurationChanged() {
-}
+void DemuxerManager::DurationChanged() {}
 
 bool DemuxerManager::WouldTaintOrigin() const {
   if (hls_fallback_) {

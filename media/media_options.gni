@@ -381,6 +381,7 @@ media_subcomponent_deps = [
 if (is_cobalt && use_starboard_media) {
   media_subcomponent_deps += [
     "//media/starboard",
+    "//media/starboard:starboard_url_renderer",
     "//media/starboard:url_player_demuxer",
   ]
 }

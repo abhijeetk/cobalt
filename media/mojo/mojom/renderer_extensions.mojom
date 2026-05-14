@@ -66,19 +66,63 @@ interface MediaFoundationRendererClientExtension {
 };
 
 [EnableIf=use_starboard_media]
-// This interface is for StarboardRendererClient to extend
-// mojo:RendererClient as StarboardRendererClient to allow
-// StarboardRenderer (on gpu thread) to post tasks
-// on StarboardRendererClient on renderer thread.
+// Direction: GPU Process → Renderer Process
+//
+// Server (receiver): StarboardRendererClient (media/mojo/clients/starboard/)
+// Client (sender):   StarboardRenderer via StarboardRendererWrapper
+//                    (media/starboard/ and media/mojo/services/starboard/)
+//
+// This interface extends mojom::RendererClient with Starboard-specific
+// callbacks. StarboardRenderer (GPU process) uses this to send platform
+// events back to StarboardRendererClient (renderer process), which
+// forwards them to the Chromium media pipeline and ultimately to JavaScript.
+//
+// Pipe: Separate from mojom::RendererClient — bound independently during
+// renderer creation in StarboardRendererClientFactory.
 interface StarboardRendererClientExtension {
-  // Paint a video hole on VideoRendererSink.
+  // Paint a video hole on VideoRendererSink so the native video surface
+  // (punch-out compositing) is visible through the web page.
   PaintVideoHoleFrame(gfx.mojom.Size size);
 
-  // Notify the rendering mode from SbPlayer.
+  // Notify the rendering mode from SbPlayer (punch-out vs decode-to-texture).
   UpdateStarboardRenderingMode(StarboardRenderingMode mode);
 
-  // Get SbWindow from StarboardRendererClient.
+  // Request the SbWindow handle from the renderer process. The renderer
+  // responds by calling OnSbWindowHandleReady on StarboardRendererExtension.
   GetSbWindowHandle();
+
+  // URL player (HLS/AVPlayer): Report stream duration discovered by AVPlayer.
+  //
+  // Why needed: In the normal HTML5 player path, the demuxer reports duration
+  // from the renderer process (DemuxerHost::SetDuration). For URL player,
+  // AVPlayer discovers duration after loading the HLS manifest in the GPU
+  // process. This Mojo call bridges that gap so JavaScript can access
+  // video.duration and the browser can clamp seek positions.
+  //
+  // Called from: StarboardRenderer::OnPlayerStatus(kSbPlayerStatePresenting)
+  //              after calling player_bridge_->GetDuration()
+  // Received by: StarboardRendererClient → pipeline → WebMediaPlayerImpl
+  //              → JS video.duration
+  OnDurationChange(mojo_base.mojom.TimeDelta duration);
+
+  // URL player (HLS/AVPlayer): Forward encrypted media init data from AVPlayer
+  // to the renderer process for EME/DRM key exchange (FairPlay Streaming).
+  //
+  // Why needed: In the normal HTML5 player path, encrypted media init data is
+  // discovered by the demuxer in the renderer process — it never crosses to
+  // GPU. For URL player, AVPlayer (GPU process) encounters FairPlay-encrypted
+  // HLS segments and fires an EncryptedMediaInitDataEncounteredCB callback.
+  // This Mojo call sends that init data back to the renderer process so
+  // JavaScript can handle the license exchange via the EME API.
+  //
+  // Called from: StarboardRenderer::OnEncryptedMediaInitDataEncountered()
+  //              (triggered by SbPlayerBridge callback from AVPlayer)
+  // Received by: StarboardRendererClient → RendererClient::OnWaiting(kNoCdm)
+  //              or client_->OnEncryptedMediaInitData()
+  //              → WebMediaPlayerImpl fires 'encrypted' event on <video>
+  //              → JavaScript EME: navigator.requestMediaKeySystemAccess()
+  OnEncryptedMediaInitDataEncountered(string init_data_type,
+                                      array<uint8> init_data);
 
   [EnableIf=is_android]
   // Request OverlayInfo from StarboardRendererClient.
@@ -134,21 +178,51 @@ interface MediaFoundationRendererExtension {
 };
 
 [EnableIf=use_starboard_media]
-// This interface is for StarboardRenderer to extend mojo::Renderer
-// as StarboardRendererWrapper to allow StarboardRendererClient to
-// post tasks on StarboardRendererWrapper on gpu thread.
+// Direction: Renderer Process → GPU Process
+//
+// Server (receiver): StarboardRendererWrapper (media/mojo/services/starboard/)
+//                    which forwards to StarboardRenderer (media/starboard/)
+// Client (sender):   StarboardRendererClient (media/mojo/clients/starboard/)
+//
+// This interface extends mojom::Renderer with Starboard-specific commands.
+// StarboardRendererClient (renderer process) uses this to send platform
+// configuration and URL player data to StarboardRenderer (GPU process).
+//
+// Pipe: Separate from mojom::Renderer — bound independently during
+// renderer creation in StarboardRendererClientFactory. Messages on this
+// pipe are NOT ordered relative to mojom::Renderer messages (e.g.
+// Initialize), though in practice both are dispatched on the same GPU
+// thread task runner.
 interface StarboardRendererExtension {
-  // Pass CommandBufferId to StarboardRendererWrapper.
+  // Pass CommandBufferId for GPU channel setup.
   OnGpuChannelTokenReady(CommandBufferId? command_buffer_id);
 
-  // Acquire frame from SbPlayer.
+  // Acquire the current video frame from SbPlayer for decode-to-texture mode.
   [Sync]
   GetCurrentVideoFrame() => (VideoFrame? video_frame);
 
-  // Pass SbWindow to StarboardRenderer.
+  // Pass the native SbWindow handle to StarboardRenderer for player creation.
+  // The renderer process obtains this from CobaltRenderContentClient and sends
+  // it here so SbPlayerCreate/SbUrlPlayerCreate can use it for punch-out
+  // video rendering.
   OnSbWindowHandleReady(uint64 sb_window_handle);
 
-  // Pass source URL for URL-based player (HLS via AVPlayer).
+  // URL player (HLS/AVPlayer): Pass the HLS source URL from the renderer
+  // process to the GPU process for native AVPlayer playback.
+  //
+  // Why needed: The <video src="stream.m3u8"> URL is known in the renderer
+  // process (parsed by Blink, carried by UrlPlayerDemuxer). But
+  // SbUrlPlayerCreate() runs in the GPU process. This Mojo call bridges the
+  // process boundary so the GPU-side renderer can create a URL-based player.
+  //
+  // Called from: StarboardRendererClient::InitializeMojoRenderer()
+  //              after extracting URL via MediaResource::GetMediaUrl()
+  // Received by: StarboardRendererWrapper → StarboardRenderer::SetSourceUrl()
+  //              → stores source_url_ for use in CreatePlayerBridge()
+  //
+  // Ordering: Sent BEFORE mojom::Renderer::Initialize() so source_url_ is
+  // available when player creation begins. Both calls originate from the same
+  // function (InitializeMojoRenderer) on the same task runner.
   SetSourceUrl(string source_url);
 
   [EnableIf=is_android]

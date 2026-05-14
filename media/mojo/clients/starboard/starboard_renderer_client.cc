@@ -276,6 +276,24 @@ void StarboardRendererClient::SetSourceUrl(const std::string& source_url) {
   }
 }
 
+void StarboardRendererClient::OnDurationChange(base::TimeDelta duration) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  DVLOG(1) << "OnDurationChange: " << duration;
+  // TODO: Forward duration to pipeline. PipelineImpl gets duration from
+  // DemuxerHost, not RendererClient. May need to call
+  // WebMediaPlayerImpl::OnDurationChange() directly or update demuxer host.
+}
+
+void StarboardRendererClient::OnEncryptedMediaInitDataEncountered(
+    const std::string& init_data_type,
+    const std::vector<uint8_t>& init_data) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  DVLOG(1) << "OnEncryptedMediaInitDataEncountered: type=" << init_data_type
+           << " length=" << init_data.size();
+  // TODO: Forward to pipeline's encrypted media handler to fire the
+  // 'encrypted' event on the <video> element for EME/DRM key exchange.
+}
+
 #if BUILDFLAG(IS_ANDROID)
 void StarboardRendererClient::RequestOverlayInfo(bool restart_for_transitions) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());

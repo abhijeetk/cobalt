@@ -329,8 +329,7 @@ void StarboardRendererWrapper::OnSbWindowHandleReady(
 
 void StarboardRendererWrapper::SetSourceUrl(const std::string& source_url) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  LOG(INFO) << "[URL-ROUTING] StarboardRendererWrapper::SetSourceUrl: "
-            << source_url;
+  LOG(INFO) << "StarboardRendererWrapper::SetSourceUrl: " << source_url;
   GetRenderer()->SetSourceUrl(source_url);
 }
 

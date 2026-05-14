@@ -108,6 +108,10 @@ class MEDIA_EXPORT StarboardRendererClient
   void PaintVideoHoleFrame(const gfx::Size& size) override;
   void UpdateStarboardRenderingMode(const StarboardRenderingMode mode) override;
   void GetSbWindowHandle() override;
+  void OnDurationChange(base::TimeDelta duration) override;
+  void OnEncryptedMediaInitDataEncountered(
+      const std::string& init_data_type,
+      const std::vector<uint8_t>& init_data) override;
 #if BUILDFLAG(IS_ANDROID)
   void RequestOverlayInfo(bool restart_for_transitions) override;
 #endif  // BUILDFLAG(IS_ANDROID)

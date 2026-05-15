@@ -22,10 +22,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "cobalt/media/service/mojom/platform_window_provider.mojom.h"
 #include "cobalt/renderer/cobalt_render_frame_observer.h"
 #include "cobalt/shell/common/url_constants.h"
 #include "components/cdm/renderer/widevine_key_system_info.h"
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
+#include "components/cdm/renderer/fairplay_key_system_info.h"
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 #include "components/js_injection/renderer/js_communication.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -426,6 +430,21 @@ void AddStarboardCmaKeySystems(::media::KeySystemInfos* key_system_infos) {
       Robustness::SW_SECURE_DECODE,  // Max video robustness.
       ::media::EmeFeatureSupport::ALWAYS_ENABLED,    // Persistent state.
       ::media::EmeFeatureSupport::ALWAYS_ENABLED));  // Distinctive identifier.
+
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
+  const base::flat_set<::media::EncryptionScheme> kFairPlayEncryptionSchemes = {
+      ::media::EncryptionScheme::kCbcs};
+
+  key_system_infos->emplace_back(new cdm::FairplayKeySystemInfo(
+      codecs,                      // Regular codecs.
+      kFairPlayEncryptionSchemes,  // Encryption schemes.
+      kSessionTypes,               // Session types.
+      codecs,                      // Hardware secure codecs.
+      kFairPlayEncryptionSchemes,  // Hardware secure encryption schemes.
+      kSessionTypes,               // Hardware secure session types.
+      ::media::EmeFeatureSupport::ALWAYS_ENABLED,    // Persistent state.
+      ::media::EmeFeatureSupport::ALWAYS_ENABLED));  // Distinctive identifier.
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 }
 
 std::unique_ptr<::media::KeySystemSupportRegistration>

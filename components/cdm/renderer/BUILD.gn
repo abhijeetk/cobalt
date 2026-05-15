@@ -63,4 +63,11 @@ static_library("renderer") {
     ]
     deps += [ "//components/cdm/common" ]
   }
+
+  if (is_cobalt) {
+    sources += [
+      "fairplay_key_system_info.cc",
+      "fairplay_key_system_info.h",
+    ]
+  }
 }

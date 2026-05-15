@@ -312,6 +312,18 @@ void StarboardRenderer::SetCdm(CdmContext* cdm_context,
   std::move(cdm_attached_cb).Run(true);
   LOG(INFO) << "CDM set successfully.";
 
+#if SB_HAS(PLAYER_WITH_URL)
+  // For URL players (AVPlayer/HLS), the player bridge is created during
+  // Initialize() without waiting for CDM (state goes straight to PLAYING).
+  // Forward the DRM system now so SbUrlPlayerSetDrmSystem connects the
+  // AVContentKeySession and drains any pending FairPlay key requests.
+  if (player_bridge_ && !source_url_.empty() &&
+      SbDrmSystemIsValid(drm_system_)) {
+    LOG(INFO) << "SetCdm: Forwarding DRM system to URL player bridge.";
+    player_bridge_->SetDrmSystem(drm_system_);
+  }
+#endif  // SB_HAS(PLAYER_WITH_URL)
+
   if (state_ != STATE_INIT_PENDING_CDM) {
     return;
   }

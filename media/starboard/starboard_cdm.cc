@@ -35,6 +35,15 @@ const char* GetInitDataTypeName(EmeInitDataType type) {
       return "cenc";
     case EmeInitDataType::KEYIDS:
       return "keyids";
+#if SB_HAS(PLAYER_WITH_URL)
+    // FairPlay init data types (sinf/skd from WebKit, fairplay from Cobalt).
+    case EmeInitDataType::SINF:
+      return "sinf";
+    case EmeInitDataType::SKD:
+      return "skd";
+    case EmeInitDataType::FAIRPLAY:
+      return "fairplay";
+#endif  // SB_HAS(PLAYER_WITH_URL)
     case EmeInitDataType::UNKNOWN:
       return "unknown";
   }

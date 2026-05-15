@@ -8,6 +8,7 @@
 
 #include "base/containers/contains.h"
 #include "base/notreached.h"
+#include "build/build_config.h"
 #include "media/base/eme_constants.h"
 #include "media/base/key_system_names.h"
 #include "media/cdm/clear_key_cdm_common.h"
@@ -68,6 +69,11 @@ bool ExternalClearKeyKeySystemInfo::IsSupportedInitDataType(
     case media::EmeInitDataType::KEYIDS:
       return true;
 
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
+    case media::EmeInitDataType::SINF:
+    case media::EmeInitDataType::SKD:
+    case media::EmeInitDataType::FAIRPLAY:
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
     case media::EmeInitDataType::UNKNOWN:
       return false;
   }

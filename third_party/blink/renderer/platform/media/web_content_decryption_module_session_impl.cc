@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/check_op.h"
+#include "build/build_config.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -111,6 +112,16 @@ bool SanitizeInitData(media::EmeInitDataType init_data_type,
       media::CreateKeyIdsInitData(key_ids, sanitized_init_data);
       return true;
     }
+
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
+    // FairPlay init data types (sinf/skd from WebKit, fairplay from Cobalt).
+    case media::EmeInitDataType::SINF:
+    case media::EmeInitDataType::SKD:
+    case media::EmeInitDataType::FAIRPLAY:
+      // FairPlay init data is passed through as-is.
+      sanitized_init_data->assign(init_data, init_data + init_data_length);
+      return true;
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 
     case media::EmeInitDataType::UNKNOWN:
       break;

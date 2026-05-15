@@ -27,32 +27,6 @@ config("disable_unreachable_warnings") {
   ]
 }
 
-source_set("starboard_url_renderer") {
-  visibility = [
-    "//media",
-    "//media/starboard",
-  ]
-
-  sources = [
-    "starboard_url_renderer.cc",
-    "starboard_url_renderer.h",
-  ]
-
-  deps = [
-    ":buildflags",
-    "//base",
-    "//media:media_buildflags",
-    "//media/base",
-    "//starboard:starboard_headers_only",
-    "//ui/gfx/geometry",
-  ]
-
-  configs += [
-    "//media:subcomponent_config",
-    ":disable_unreachable_warnings",
-  ]
-}
-
 source_set("url_player_demuxer") {
   visibility = [
     "//media",
@@ -107,7 +81,6 @@ source_set("starboard") {
 
     deps += [
       ":buildflags",
-      ":starboard_url_renderer",
       ":url_player_demuxer",
     ]
   }

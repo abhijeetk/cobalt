@@ -40,15 +40,51 @@ void SbDrmUpdateSession(SbDrmSystem drm_system,
       SBDApplicationDrmSystem* applicationDrmSystem =
           [drmManager applicationDrmSystemForStarboardDrmSystem:drm_system];
 
-      NSString* base64KeyString =
+      // Try raw binary first (standard EME / "skd" path).
+      // Standard FairPlay license servers return raw binary CKC data.
+      // WebKit passes it directly to AVContentKeyResponse:
+      //   CDMInstanceFairPlayStreamingAVFObjC.mm:1055:
+      //   [request processContentKeyResponse:
+      //       [AVContentKeyResponse contentKeyResponseWith
+      //           FairPlayStreamingKeyResponseData:responseData->createNSData()]]
+      //
+      // C25/YouTube path sends base64-encoded CKC. Try base64 decode as
+      // fallback for backward compatibility.
+      NSData* keyData = [NSData dataWithBytes:key length:key_size];
+
+      // Check if the data is base64-encoded (C25/YouTube sends base64)
+      NSString* possibleBase64 =
           [[NSString alloc] initWithBytes:(char*)key
                                    length:key_size
                                  encoding:NSUTF8StringEncoding];
-      NSData* keyData =
-          [[NSData alloc] initWithBase64EncodedString:base64KeyString
-                                              options:0];
+      if (possibleBase64) {
+        NSData* decoded =
+            [[NSData alloc] initWithBase64EncodedString:possibleBase64
+                                                options:0];
+        if (decoded) {
+          // Valid base64: use decoded data (C25/YouTube path)
+          NSLog(@"[ABHIJEET][FPS-FLOW] SbDrmUpdateSession: key is base64"
+                @" encoded=%d decoded=%lu bytes",
+                key_size, (unsigned long)decoded.length);
+          keyData = decoded;
+        } else {
+          // Not valid base64: use raw binary (standard EME path)
+          NSLog(@"[ABHIJEET][FPS-FLOW] SbDrmUpdateSession: key is raw"
+                @" binary, size=%d bytes",
+                key_size);
+        }
+      } else {
+        // Not valid UTF-8: definitely raw binary
+        NSLog(@"[ABHIJEET][FPS-FLOW] SbDrmUpdateSession: key is raw"
+              @" binary (not UTF-8), size=%d bytes",
+              key_size);
+      }
+
       NSData* sessionId = [NSData dataWithBytes:session_id
                                          length:session_id_size];
+      NSLog(@"[ABHIJEET][FPS-FLOW] SbDrmUpdateSession: ticket=%d"
+            @" keySize=%lu sessionIdSize=%d",
+            ticket, (unsigned long)keyData.length, session_id_size);
 
       [applicationDrmSystem updateSessionWithKey:keyData
                                           ticket:ticket

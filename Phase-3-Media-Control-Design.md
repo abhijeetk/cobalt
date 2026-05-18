@@ -1,0 +1,39 @@
+# Design Doc: URL Player Phase 3 — Media Control & Pipeline Integration
+
+**Context:** Phase 1 and 2 focused on architecture and DRM. Phase 3 ensures that the URL Player (AVPlayer) behaves as a fully integrated HTML5 Media Element within the Chrobalt pipeline.
+
+## 1. Objectives
+*   **Command Mapping:** Bind HTML5 Media API calls (`play()`, `pause()`, `seek()`, `playbackRate`) to native `AVPlayer` methods.
+*   **State Synchronization:** Map native `AVPlayerItem` status changes back to Chromium `ReadyState` and `NetworkState`.
+*   **Buffering & Progress:** Accurately report `buffered` ranges and `currentTime` from the native player to the web app.
+*   **QoE & Metrics:** Forward hardware-reported dropped frames and quality-of-service stats to Chromium's `PipelineStatistics`.
+
+## 2. Architecture: The Control Loop
+The integration uses a **Dual-Proxy** model over Mojo:
+
+1.  **StarboardRendererClient (Renderer):** Intercepts `WebMediaPlayerImpl` commands and sends them over the `StarboardRendererExtension` Mojo interface.
+2.  **StarboardRenderer (GPU):** Receives Mojo calls and translates them into `SbPlayer` (Starboard) calls, which `SbPlayerBridge` then applies to the native `AVPlayer`.
+
+## 3. Key Implementation Areas
+
+### A. Playback Controls (The Command Path)
+*   **Seek:** Map `WebMediaPlayerImpl::Seek` to `SbPlayerSeek`. Handle `AVPlayer`'s asynchronous `seekToTime:completionHandler:` to correctly trigger the `OnPipelineSeeked` callback in the Renderer.
+*   **Rate:** Map `setRate()` to `AVPlayer.rate`.
+
+### B. State Mapping (The Observation Path)
+Map native `AVPlayer` statuses to Chromium `ReadyState`:
+*   `AVPlayerItemStatusReadyToPlay` → `kReadyStateHaveEnoughData`
+*   `AVPlayerTimeControlStatusWaitingToPlayAtSpecifiedRate` → `kReadyStateHaveCurrentData` (Buffering)
+*   `AVPlayerTimeControlStatusPlaying` → `kReadyStateHaveEnoughData`
+
+### C. Buffering & Timeline
+*   **Buffered Ranges:** Poll `AVPlayerItem.loadedTimeRanges` in the GPU process and send to the Renderer via Mojo to populate `WebMediaPlayerImpl::Buffered()`.
+*   **Time Tracking:** High-frequency polling of `AVPlayer.currentTime` for the Renderer-side `GetMediaTime` call.
+
+### D. Natural Size & Rendering
+*   **Punch-Out View:** Forward `presentationSize` from the GPU process to the Renderer via `OnVideoNaturalSizeChange` to ensure the "Video Hole" (transparency) is correctly sized.
+
+## 4. Challenges
+*   **Mojo Latency:** Minimizing lag between GPU-reported time and Renderer-side queries.
+*   **End-of-Stream (EOS):** Mapping `AVPlayerItemDidPlayToEndTimeNotification` to Chromium's `OnEnded()`.
+*   **Error Mapping:** Translating native CoreMedia errors (e.g., `-19152`) to Chromium `PipelineStatus`.

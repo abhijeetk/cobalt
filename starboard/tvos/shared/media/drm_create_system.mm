@@ -73,7 +73,8 @@ SbDrmSystem SbDrmCreateSystem(
     SBDApplicationDrmSystem* drmSystem =
         [drmManager drmSystemWithContext:context
                 sessionUpdateRequestFunc:update_request_callback
-                      sessionUpdatedFunc:session_updated_callback];
+                      sessionUpdatedFunc:session_updated_callback
+            serverCertificateUpdatedFunc:server_certificate_updated_callback];
     return [drmManager starboardDrmSystemForApplicationDrmSystem:drmSystem];
   }
 }

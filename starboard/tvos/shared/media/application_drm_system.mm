@@ -67,6 +67,13 @@
   SbDrmSessionUpdatedFunc _sessionUpdatedFunc;
 
   /**
+   *  @brief A callback for notifications that the server certificate has
+   *      been updated. Used by standard EME setServerCertificate() flow
+   *      ("skd" path). Not used by C25/YouTube "fairplay" path.
+   */
+  SbDrmServerCertificateUpdatedFunc _serverCertificateUpdatedFunc;
+
+  /**
    *  @brief Data for key prefetches.
    */
   NSMutableDictionary<NSString*, SBDKeyPrefetchData*>* _keyPrefetchData;
@@ -88,17 +95,48 @@
 - (instancetype)initWithSessionContext:(void*)context
               sessionUpdateRequestFunc:
                   (SbDrmSessionUpdateRequestFunc)updateRequestFunc
-                    sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc {
+                    sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc
+          serverCertificateUpdatedFunc:
+              (SbDrmServerCertificateUpdatedFunc)serverCertificateUpdatedFunc {
   self = [super init];
   if (self) {
     _sessionContext = context;
     _sessionUpdateRequestFunc = updateRequestFunc;
     _sessionUpdatedFunc = updatedFunc;
+    _serverCertificateUpdatedFunc = serverCertificateUpdatedFunc;
     _keyRequestsPendingUpdateRequest = [NSMutableDictionary dictionary];
     _keyRequestsPendingKey = [NSMutableDictionary dictionary];
     _keyPrefetchData = [NSMutableDictionary dictionary];
   }
   return self;
+}
+
+- (void)updateServerCertificate:(NSData*)certificate ticket:(NSInteger)ticket {
+  // Standard EME: store certificate for later use in SPC generation.
+  // This differs from C25/YouTube where the cert was packed inside
+  // generateRequest() init data. In standard EME ("skd" path), the cert
+  // is provided separately via setServerCertificate().
+  // WebKit ref: CDMInstanceFairPlayStreamingAVFObjC.mm:394-409
+  //   m_serverCertificate = WTF::move(serverCertificate);
+  @synchronized(self) {
+    _serverCertificate = certificate;
+  }
+  NSLog(@"[ABHIJEET][FPS-FLOW] updateServerCertificate: stored %lu bytes",
+        (unsigned long)certificate.length);
+
+  // Fire callback to resolve the JS setServerCertificate() promise.
+  // Pattern matches how _sessionUpdateRequestFunc and _sessionUpdatedFunc
+  // fire their callbacks to resolve promises in StarboardCdm.
+  if (_serverCertificateUpdatedFunc) {
+    SBDDrmManager* drmManager = SBDGetApplication().drmManager;
+    SbDrmSystem starboardDrmSystem =
+        [drmManager starboardDrmSystemForApplicationDrmSystem:self];
+    NSLog(@"[ABHIJEET][FPS-FLOW] updateServerCertificate: firing callback"
+          @" ticket=%ld",
+          (long)ticket);
+    _serverCertificateUpdatedFunc(starboardDrmSystem, _sessionContext,
+                                  (int)ticket, kSbDrmStatusSuccess, "");
+  }
 }
 
 - (void)updateSessionWithKey:(NSData*)key

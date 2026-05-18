@@ -35,9 +35,12 @@
  *      data to decrypt a video.
  */
 - (SBDApplicationDrmSystem*)
-        drmSystemWithContext:(void*)context
-    sessionUpdateRequestFunc:(SbDrmSessionUpdateRequestFunc)updateRequestFunc
-          sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc;
+            drmSystemWithContext:(void*)context
+        sessionUpdateRequestFunc:
+            (SbDrmSessionUpdateRequestFunc)updateRequestFunc
+              sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc
+    serverCertificateUpdatedFunc:
+        (SbDrmServerCertificateUpdatedFunc)serverCertificateUpdatedFunc;
 
 /**
  *  @brief Destroys a DRM system.

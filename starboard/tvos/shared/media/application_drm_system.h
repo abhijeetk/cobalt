@@ -35,6 +35,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) AVContentKeySession* keySession;
 
 /**
+ *  @brief The FairPlay server certificate for standard EME ("skd" path).
+ *      Stored via setServerCertificate() and used during SPC generation
+ *      in generateRequest(). This is the standard EME approach used by
+ *      WebKit/Safari (CDMInstanceFairPlayStreamingAVFObjC m_serverCertificate).
+ *      The C25/YouTube "fairplay" path does NOT use this -- it packs the
+ *      certificate inside generateRequest() init data instead.
+ */
+@property(nonatomic) NSData* serverCertificate;
+
+/**
  *  @brief Called when key data is received from Starboard.
  *  @param key The key data to pass on to the OS to decrypt playback.
  *  @param ticket The opaque ID used to distinguish between concurrent key
@@ -74,6 +84,18 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init NS_UNAVAILABLE;
 
 /**
+ *  @brief Update the server certificate for standard EME ("skd" path).
+ *      Stores the certificate for later use in SPC generation and fires
+ *      the serverCertificateUpdatedFunc callback to resolve the JS promise.
+ *      WebKit ref: CDMInstanceFairPlayStreamingAVFObjC::setServerCertificate()
+ *      C25/YouTube "fairplay" path does NOT use this -- it packs the
+ *      certificate into generateRequest() init data instead.
+ *  @param certificate The FairPlay server certificate (DER binary).
+ *  @param ticket The opaque ID for the callback.
+ */
+- (void)updateServerCertificate:(NSData*)certificate ticket:(NSInteger)ticket;
+
+/**
  *  @brief Designated initializer.
  *  @param context Parameter to be passed to session callback functions.
  *  @param updateRequestFunc A callback that will receive generated session
@@ -81,11 +103,18 @@ NS_ASSUME_NONNULL_BEGIN
  *  @param updatedFunc A callback for notifications that a session has been
  *      added, and subsequent encrypted samples are actively ready to be
  *      decoded.
+ *  @param serverCertificateUpdatedFunc A callback for notifications that
+ *      the server certificate has been updated. Required for standard EME
+ *      setServerCertificate() support (the "skd" init data type path).
+ *      C25/YouTube ("fairplay" type) did not use this callback because
+ *      it packed the certificate into generateRequest() init data instead.
  */
 - (instancetype)initWithSessionContext:(void*)context
               sessionUpdateRequestFunc:
                   (SbDrmSessionUpdateRequestFunc)updateRequestFunc
                     sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc
+          serverCertificateUpdatedFunc:
+              (SbDrmServerCertificateUpdatedFunc)serverCertificateUpdatedFunc
     NS_DESIGNATED_INITIALIZER;
 
 @end

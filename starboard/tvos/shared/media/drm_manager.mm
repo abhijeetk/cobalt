@@ -38,13 +38,18 @@
 }
 
 - (SBDApplicationDrmSystem*)
-        drmSystemWithContext:(void*)context
-    sessionUpdateRequestFunc:(SbDrmSessionUpdateRequestFunc)updateRequestFunc
-          sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc {
+            drmSystemWithContext:(void*)context
+        sessionUpdateRequestFunc:
+            (SbDrmSessionUpdateRequestFunc)updateRequestFunc
+              sessionUpdatedFunc:(SbDrmSessionUpdatedFunc)updatedFunc
+    serverCertificateUpdatedFunc:
+        (SbDrmServerCertificateUpdatedFunc)serverCertificateUpdatedFunc {
   SBDApplicationDrmSystem* applicationDrmSystem =
-      [[SBDApplicationDrmSystem alloc] initWithSessionContext:context
-                                     sessionUpdateRequestFunc:updateRequestFunc
-                                           sessionUpdatedFunc:updatedFunc];
+      [[SBDApplicationDrmSystem alloc]
+                initWithSessionContext:context
+              sessionUpdateRequestFunc:updateRequestFunc
+                    sessionUpdatedFunc:updatedFunc
+          serverCertificateUpdatedFunc:serverCertificateUpdatedFunc];
   @synchronized(_drmSystems) {
     [_drmSystems addObject:applicationDrmSystem];
   }

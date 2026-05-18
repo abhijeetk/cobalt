@@ -32,7 +32,15 @@ bool SbDrmIsServerCertificateUpdatable(SbDrmSystem drm_system) {
   @autoreleasepool {
     SBDDrmManager* drmManager = SBDGetApplication().drmManager;
     if ([drmManager isApplicationDrmSystem:drm_system]) {
-      return false;
+      // Standard EME: setServerCertificate() is supported for FairPlay.
+      // This differs from C25 which returned false here because YouTube
+      // packs the certificate into generateRequest() init data instead.
+      // We now support both paths:
+      //   "skd" type:     cert via setServerCertificate() (standard EME)
+      //   "fairplay" type: cert packed in generateRequest() (YouTube/C25)
+      NSLog(@"[ABHIJEET][FPS-FLOW] IsServerCertificateUpdatable:"
+            @" returning true for application DRM (FairPlay)");
+      return true;
     }
   }
 

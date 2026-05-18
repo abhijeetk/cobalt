@@ -73,6 +73,16 @@ class MEDIA_EXPORT StarboardRendererClient
   StarboardRendererClient(const StarboardRendererClient&) = delete;
   StarboardRendererClient& operator=(const StarboardRendererClient&) = delete;
 
+#if SB_HAS(PLAYER_WITH_URL)
+  // Callback to forward encrypted media init data to WebMediaPlayerImpl.
+  using EncryptedMediaInitDataCB =
+      base::RepeatingCallback<void(EmeInitDataType init_data_type,
+                                   const std::vector<uint8_t>& init_data)>;
+  void SetEncryptedMediaInitDataCB(EncryptedMediaInitDataCB cb) {
+    encrypted_media_init_data_cb_ = std::move(cb);
+  }
+#endif  // SB_HAS(PLAYER_WITH_URL)
+
   ~StarboardRendererClient() override;
 
   // MojoRendererWrapper overrides.
@@ -156,6 +166,9 @@ class MEDIA_EXPORT StarboardRendererClient
   mojo::Receiver<ClientExtension> client_extension_receiver_;
   const GetSbWindowHandleCallback get_sb_window_handle_callback_;
   raw_ptr<GpuVideoAcceleratorFactories> gpu_factories_ = nullptr;
+#if SB_HAS(PLAYER_WITH_URL)
+  EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
+#endif  // SB_HAS(PLAYER_WITH_URL)
 #if BUILDFLAG(IS_ANDROID)
   RequestOverlayInfoCB request_overlay_info_cb_;
 #endif  // BUILDFLAG(IS_ANDROID)

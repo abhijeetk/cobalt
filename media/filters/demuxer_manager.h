@@ -155,6 +155,12 @@ class MEDIA_EXPORT DemuxerManager {
   bool PassedDataSourceTimingAllowOriginCheck() const;
   bool IsLiveContent() const;
 
+  // Forward encrypted media init data to the client (WebMediaPlayerImpl).
+  // Public so that StarboardRendererClient can call it for URL player
+  // encrypted events that arrive via Mojo from the GPU process.
+  void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
+                                const std::vector<uint8_t>& init_data);
+
  private:
   // Demuxer creation and helper methods
   std::unique_ptr<media::Demuxer> CreateChunkDemuxer();
@@ -180,10 +186,6 @@ class MEDIA_EXPORT DemuxerManager {
   // Memory pressure listener specifically for when using ChunkDemuxer.
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel level);
-
-  // Trampoline methods for binding with |weak_this_| that call into |client_|.;
-  void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
-                                const std::vector<uint8_t>& init_data);
   void OnChunkDemuxerOpened();
   void OnProgress();
   void RestartClientForHLS();

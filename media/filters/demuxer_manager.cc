@@ -568,6 +568,10 @@ void DemuxerManager::SetDemuxer(std::unique_ptr<Demuxer> demuxer) {
 void DemuxerManager::OnEncryptedMediaInitData(
     EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data) {
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] DemuxerManager::OnEncryptedMediaInitData:"
+            << " type=" << static_cast<int>(init_data_type)
+            << " size=" << init_data.size()
+            << " client=" << (client_ ? "set" : "null");
   if (client_) {
     client_->OnEncryptedMediaInitData(init_data_type, init_data);
   }

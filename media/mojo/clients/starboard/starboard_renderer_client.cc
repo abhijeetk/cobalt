@@ -288,10 +288,35 @@ void StarboardRendererClient::OnEncryptedMediaInitDataEncountered(
     const std::string& init_data_type,
     const std::vector<uint8_t>& init_data) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  DVLOG(1) << "OnEncryptedMediaInitDataEncountered: type=" << init_data_type
-           << " length=" << init_data.size();
-  // TODO: Forward to pipeline's encrypted media handler to fire the
-  // 'encrypted' event on the <video> element for EME/DRM key exchange.
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] StarboardRendererClient received"
+            << " encrypted init data: type=" << init_data_type
+            << " length=" << init_data.size();
+#if SB_HAS(PLAYER_WITH_URL)
+  if (encrypted_media_init_data_cb_) {
+    // Convert string to EmeInitDataType enum.
+    EmeInitDataType eme_type = EmeInitDataType::UNKNOWN;
+    if (init_data_type == "sinf") {
+      eme_type = EmeInitDataType::SINF;
+    } else if (init_data_type == "skd") {
+      eme_type = EmeInitDataType::SKD;
+    } else if (init_data_type == "fairplay") {
+      eme_type = EmeInitDataType::FAIRPLAY;
+    } else if (init_data_type == "cenc") {
+      eme_type = EmeInitDataType::CENC;
+    } else if (init_data_type == "keyids") {
+      eme_type = EmeInitDataType::KEYIDS;
+    } else if (init_data_type == "webm") {
+      eme_type = EmeInitDataType::WEBM;
+    }
+
+    LOG(INFO) << "[ABHIJEET][FPS-FLOW] Forwarding to WMPI:"
+              << " eme_type=" << static_cast<int>(eme_type);
+    encrypted_media_init_data_cb_.Run(eme_type, init_data);
+  } else {
+    LOG(WARNING) << "[ABHIJEET][FPS-FLOW] No encrypted_media_init_data_cb_"
+                 << " set, encrypted event will not reach JS.";
+  }
+#endif  // SB_HAS(PLAYER_WITH_URL)
 }
 
 #if BUILDFLAG(IS_ANDROID)

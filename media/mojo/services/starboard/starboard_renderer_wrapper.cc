@@ -107,6 +107,14 @@ void StarboardRendererWrapper::Initialize(MediaResource* media_resource,
 #endif  // BUILDFLAG(IS_ANDROID)
   );
 
+#if SB_HAS(PLAYER_WITH_URL)
+  // Set callback to forward encrypted media init data from AVPlayer
+  // through Mojo to the renderer process for EME 'encrypted' event.
+  GetRenderer()->SetEncryptedMediaInitDataCB(base::BindRepeating(
+      &StarboardRendererWrapper::OnEncryptedMediaInitDataEncountered,
+      weak_factory_.GetWeakPtr()));
+#endif  // SB_HAS(PLAYER_WITH_URL)
+
   base::ScopedClosureRunner scoped_init_cb(
       base::BindOnce(&StarboardRendererWrapper::ContinueInitialization,
                      weak_factory_.GetWeakPtr(), std::move(media_resource),
@@ -400,6 +408,18 @@ void StarboardRendererWrapper::OnGetSbWindowHandle() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   client_extension_remote_->GetSbWindowHandle();
 }
+
+#if SB_HAS(PLAYER_WITH_URL)
+void StarboardRendererWrapper::OnEncryptedMediaInitDataEncountered(
+    const std::string& init_data_type,
+    const std::vector<uint8_t>& init_data) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] Wrapper forwarding encrypted init data"
+            << " type=" << init_data_type << " length=" << init_data.size();
+  client_extension_remote_->OnEncryptedMediaInitDataEncountered(init_data_type,
+                                                                init_data);
+}
+#endif  // SB_HAS(PLAYER_WITH_URL)
 
 void StarboardRendererWrapper::OnSubscribeToVideoGeometryChange(
     MediaResource* /* media_resource */,

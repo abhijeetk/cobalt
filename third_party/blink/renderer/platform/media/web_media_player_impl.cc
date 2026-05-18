@@ -108,7 +108,10 @@
 
 #if BUILDFLAG(USE_STARBOARD_MEDIA)
 #include "media/starboard/starboard_renderer.h"
-#endif // BUILDFLAG(USE_STARBOARD_MEDIA)
+#if SB_HAS(PLAYER_WITH_URL)
+#include "media/mojo/clients/starboard/starboard_renderer_client.h"
+#endif  // SB_HAS(PLAYER_WITH_URL)
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
 #include "media/filters/hls_data_source_provider_impl.h"
@@ -1694,6 +1697,10 @@ void WebMediaPlayerImpl::SetRenderMutedAudio(bool render_muted_audio) {
 void WebMediaPlayerImpl::OnEncryptedMediaInitData(
     media::EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data) {
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] WebMediaPlayerImpl::"
+            << "OnEncryptedMediaInitData: type="
+            << static_cast<int>(init_data_type)
+            << " size=" << init_data.size();
   DCHECK(init_data_type != media::EmeInitDataType::UNKNOWN);
 
   RecordEncryptedEvent(true);
@@ -3025,10 +3032,35 @@ std::unique_ptr<media::Renderer> WebMediaPlayerImpl::CreateRenderer(
   }
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
-  return renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
-      media_task_runner_, worker_task_runner_, audio_source_provider_.get(),
-      compositor_.get(), std::move(request_overlay_info_cb),
-      client_->TargetColorSpace());
+  auto renderer =
+      renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
+          media_task_runner_, worker_task_runner_, audio_source_provider_.get(),
+          compositor_.get(), std::move(request_overlay_info_cb),
+          client_->TargetColorSpace());
+
+#if BUILDFLAG(USE_STARBOARD_MEDIA) && SB_HAS(PLAYER_WITH_URL)
+  // For URL players (AVPlayer/HLS), encrypted events come from the GPU process
+  // via Mojo, not from the demuxer. Wire StarboardRendererClient to forward
+  // encrypted init data through DemuxerManager (reusing existing Chromium path).
+  if (renderer && demuxer_manager_ &&
+      renderer_type_ == media::RendererType::kStarboard) {
+    auto* starboard_client =
+        static_cast<media::StarboardRendererClient*>(renderer.get());
+    if (starboard_client) {
+      LOG(INFO) << "[ABHIJEET][FPS-FLOW] Wiring encrypted media callback:"
+                << " StarboardRendererClient -> DemuxerManager"
+                << " (via main_task_runner PostTask)";
+      // StarboardRendererClient runs on the media task runner, but
+      // DemuxerManager::OnEncryptedMediaInitData -> WMPI expects the main
+      // thread. Wrap with PostTask to main_task_runner_.
+      starboard_client->SetEncryptedMediaInitDataCB(base::BindPostTaskToCurrentDefault(
+          base::BindRepeating(&media::DemuxerManager::OnEncryptedMediaInitData,
+                              base::Unretained(demuxer_manager_.get()))));
+    }
+  }
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA) && SB_HAS(PLAYER_WITH_URL)
+
+  return renderer;
 }
 
 std::optional<media::DemuxerType> WebMediaPlayerImpl::GetDemuxerType() const {

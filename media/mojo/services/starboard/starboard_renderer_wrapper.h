@@ -124,6 +124,11 @@ class StarboardRendererWrapper
   void OnUpdateStarboardRenderingModeByStarboard(
       const StarboardRenderingMode mode);
   void OnGetSbWindowHandle();
+#if SB_HAS(PLAYER_WITH_URL)
+  void OnEncryptedMediaInitDataEncountered(
+      const std::string& init_data_type,
+      const std::vector<uint8_t>& init_data);
+#endif  // SB_HAS(PLAYER_WITH_URL)
   void OnSubscribeToVideoGeometryChange(MediaResource* media_resource,
                                         RendererClient* client);
 #if BUILDFLAG(IS_ANDROID)

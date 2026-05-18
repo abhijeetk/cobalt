@@ -561,9 +561,35 @@ void StarboardRenderer::OnEncryptedMediaInitDataEncountered(
     const char* init_data_type,
     const unsigned char* init_data,
     unsigned int init_data_length) {
-  LOG(INFO) << "OnEncryptedMediaInitDataEncountered: type=" << init_data_type
-            << " length=" << init_data_length;
-  // TODO: Forward encrypted media init data to the EME/DRM layer.
+  // This callback fires from the Starboard/AVFoundation thread (not the GPU
+  // task runner). PostTask to the correct sequence before calling the wrapper,
+  // which has a thread checker. This matches the pattern used by other
+  // SbPlayerBridge callbacks (e.g., PlayerStatusCB, DeallocateSampleCB).
+  std::string type(init_data_type);
+  std::vector<uint8_t> data(init_data, init_data + init_data_length);
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] OnEncryptedMediaInitDataEncountered"
+            << " (Starboard thread): type=" << type << " length=" << data.size()
+            << " posting to task_runner_";
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&StarboardRenderer::OnEncryptedMediaInitDataOnTaskRunner,
+                     weak_factory_.GetWeakPtr(), std::move(type),
+                     std::move(data)));
+}
+
+void StarboardRenderer::OnEncryptedMediaInitDataOnTaskRunner(
+    const std::string& init_data_type,
+    const std::vector<uint8_t>& init_data) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] OnEncryptedMediaInitDataOnTaskRunner"
+            << " (GPU task runner): type=" << init_data_type
+            << " length=" << init_data.size();
+  if (encrypted_media_init_data_cb_) {
+    encrypted_media_init_data_cb_.Run(init_data_type, init_data);
+  } else {
+    LOG(WARNING) << "OnEncryptedMediaInitDataOnTaskRunner: no callback set, "
+                 << "encrypted event will not reach JS.";
+  }
 }
 #endif  // SB_HAS(PLAYER_WITH_URL)
 

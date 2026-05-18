@@ -75,22 +75,70 @@ void SbDrmGenerateSessionUpdateRequest(SbDrmSystem drm_system,
       SBDApplicationDrmSystem* applicationDrmSystem =
           [drmManager applicationDrmSystemForStarboardDrmSystem:drm_system];
 
-      NSData* packedData = [NSData dataWithBytes:initialization_data
-                                          length:initialization_data_size];
-      NSArray<NSData*>* unpackedData = unpackData(packedData);
-      if (unpackedData.count < 3) {
-        SB_DLOG(ERROR) << "Invalid initialization data.";
-        return;
-      }
-      NSData* initData = unpackedData[0];
-      NSData* contentID = unpackedData[1];
-      NSData* certData = unpackedData[2];
+      NSLog(@"[ABHIJEET][FPS-FLOW] SbDrmGenerateSessionUpdateRequest:"
+            @" type='%s' size=%d ticket=%d",
+            type, initialization_data_size, ticket);
 
-      [applicationDrmSystem
-          generateSessionUpdateRequestWithCertificationData:certData
-                                          contentIdentifier:contentID
-                                                   initData:initData
-                                                     ticket:ticket];
+      // Branch based on init data type. Two paths coexist:
+      //   "skd":      Standard EME (WebKit/Safari). Init data is raw UTF-8
+      //               skd:// URI. Certificate was stored via
+      //               setServerCertificate().
+      //   "fairplay": C25/YouTube. Init data is packed as
+      //               [4B len][skd URL UTF-16LE][4B len][contentID][4B
+      //               len][cert]. Certificate is embedded in the packed data.
+      if (strcmp(type, "skd") == 0) {
+        // Standard FairPlay path matching WebKit behavior:
+        // CDMInstanceFairPlayStreamingAVFObjC.mm:832-873
+        //   identifier = [[NSString alloc] initWithData:...
+        //                                     encoding:NSUTF8StringEncoding];
+        //   [session processContentKeyRequestWithIdentifier:identifier ...]
+        NSData* initData = [NSData dataWithBytes:initialization_data
+                                          length:initialization_data_size];
+
+        // Log the raw init data as UTF-8 string for debugging
+        NSString* initDataStr =
+            [[NSString alloc] initWithData:initData
+                                  encoding:NSUTF8StringEncoding];
+        NSLog(@"[ABHIJEET][FPS-FLOW]   skd path: raw UTF-8 init data='%@'"
+              @" length=%d",
+              initDataStr ?: @"(not valid UTF-8)", initialization_data_size);
+        NSLog(
+            @"[ABHIJEET][FPS-FLOW]   serverCertificate=%@, certSize=%lu",
+            applicationDrmSystem.serverCertificate ? @"present" : @"nil",
+            (unsigned long)(applicationDrmSystem.serverCertificate
+                                ? applicationDrmSystem.serverCertificate.length
+                                : 0));
+
+        [applicationDrmSystem generateSessionUpdateRequestForSkd:initData
+                                                          ticket:ticket];
+      } else {
+        // C25/YouTube "fairplay" path: unpack [initData|contentID|cert]
+        NSData* packedData = [NSData dataWithBytes:initialization_data
+                                            length:initialization_data_size];
+        NSArray<NSData*>* unpackedData = unpackData(packedData);
+        if (unpackedData.count < 3) {
+          NSLog(@"[ABHIJEET][FPS-FLOW]   fairplay path: unpackData FAILED"
+                @" (got %lu fields, need 3). Raw size=%d",
+                (unsigned long)(unpackedData ? unpackedData.count : 0),
+                initialization_data_size);
+          SB_DLOG(ERROR) << "Invalid initialization data for type=" << type;
+          return;
+        }
+        NSData* initData = unpackedData[0];
+        NSData* contentID = unpackedData[1];
+        NSData* certData = unpackedData[2];
+
+        NSLog(@"[ABHIJEET][FPS-FLOW]   fairplay path: unpacked"
+              @" initData=%lu contentID=%lu cert=%lu bytes",
+              (unsigned long)initData.length, (unsigned long)contentID.length,
+              (unsigned long)certData.length);
+
+        [applicationDrmSystem
+            generateSessionUpdateRequestWithCertificationData:certData
+                                            contentIdentifier:contentID
+                                                     initData:initData
+                                                       ticket:ticket];
+      }
       return;
     }
   }

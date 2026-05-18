@@ -84,6 +84,19 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init NS_UNAVAILABLE;
 
 /**
+ *  @brief Generate a session update request for the standard EME "skd" path.
+ *      Decodes the init data as UTF-8 to get the skd:// identifier, looks up
+ *      the pending AVContentKeyRequest, and calls
+ *      makeStreamingContentKeyRequestDataForApp: with the stored server
+ *      certificate to generate the SPC.
+ *      WebKit ref: CDMInstanceFairPlayStreamingAVFObjC.mm:832-873, 1240-1277
+ *  @param initData The raw UTF-8 encoded skd:// URI.
+ *  @param ticket The opaque ID for the callback.
+ */
+- (void)generateSessionUpdateRequestForSkd:(NSData*)initData
+                                    ticket:(NSInteger)ticket;
+
+/**
  *  @brief Update the server certificate for standard EME ("skd" path).
  *      Stores the certificate for later use in SPC generation and fires
  *      the serverCertificateUpdatedFunc callback to resolve the JS promise.

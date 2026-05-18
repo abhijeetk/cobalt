@@ -139,6 +139,96 @@
   }
 }
 
+- (void)generateSessionUpdateRequestForSkd:(NSData*)initData
+                                    ticket:(NSInteger)ticket {
+  // Standard EME "skd" path, matching WebKit behavior:
+  // CDMInstanceFairPlayStreamingAVFObjC.mm:832-833:
+  //   identifier = [[NSString alloc] initWithData:...
+  //   encoding:NSUTF8StringEncoding];
+  // CDMInstanceFairPlayStreamingAVFObjC.mm:1240-1255:
+  //   appIdentifier = m_instance->serverCertificate();
+  //   [request makeStreamingContentKeyRequestDataForApp:appIdentifier ...]
+
+  // Step 1: Decode UTF-8 init data to get skd:// identifier
+  // (Gap #3 fix: use NSUTF8StringEncoding, not
+  // NSUTF16LittleEndianStringEncoding)
+  NSString* requestIdentifier =
+      [[NSString alloc] initWithData:initData encoding:NSUTF8StringEncoding];
+  NSLog(@"[ABHIJEET][FPS-FLOW] generateSessionUpdateRequestForSkd:"
+        @" identifier='%@' ticket=%ld",
+        requestIdentifier ?: @"(nil - decode failed)", (long)ticket);
+
+  if (!requestIdentifier) {
+    NSLog(@"[ABHIJEET][FPS-FLOW]   ERROR: failed to decode init data as UTF-8");
+    return;
+  }
+
+  // Step 2: Look up the pending AVContentKeyRequest by identifier
+  // The key request was queued in _keyRequestsPendingUpdateRequest when
+  // processKeyRequest: was called from application_player.mm
+  AVContentKeyRequest* keyRequest;
+  @synchronized(self) {
+    keyRequest = _keyRequestsPendingUpdateRequest[requestIdentifier];
+    [_keyRequestsPendingUpdateRequest removeObjectForKey:requestIdentifier];
+  }
+
+  NSLog(@"[ABHIJEET][FPS-FLOW]   pending key request lookup: %@,"
+        @" pendingCount=%lu",
+        keyRequest ? @"FOUND" : @"NOT FOUND",
+        (unsigned long)_keyRequestsPendingUpdateRequest.count);
+
+  if (!keyRequest) {
+    NSLog(@"[ABHIJEET][FPS-FLOW]   ERROR: no pending key request for"
+          @" identifier '%@'",
+          requestIdentifier);
+    // Log all pending identifiers for debugging
+    @synchronized(self) {
+      for (NSString* key in _keyRequestsPendingUpdateRequest) {
+        NSLog(@"[ABHIJEET][FPS-FLOW]     pending identifier: '%@'", key);
+      }
+    }
+    return;
+  }
+
+  // Step 3: Get the stored server certificate (from setServerCertificate)
+  NSData* certData;
+  @synchronized(self) {
+    certData = _serverCertificate;
+  }
+
+  NSLog(@"[ABHIJEET][FPS-FLOW]   serverCertificate: %@, size=%lu",
+        certData ? @"present" : @"nil",
+        (unsigned long)(certData ? certData.length : 0));
+
+  if (!certData) {
+    NSLog(@"[ABHIJEET][FPS-FLOW]   ERROR: no server certificate stored."
+          @" Was setServerCertificate() called before generateRequest()?");
+    return;
+  }
+
+  // Step 4: Extract content identifier from the skd:// URI
+  // The content identifier is typically the part after "skd://"
+  // WebKit ref: CDMInstanceFairPlayStreamingAVFObjC.mm:1252
+  //   contentIdentifier = keyIDs.first()->makeContiguous()->createNSData();
+  NSData* contentIdentifier =
+      [requestIdentifier dataUsingEncoding:NSUTF8StringEncoding];
+
+  NSLog(
+      @"[ABHIJEET][FPS-FLOW]   calling makeStreamingContentKeyRequestDataForApp"
+      @" certSize=%lu contentIdSize=%lu",
+      (unsigned long)certData.length, (unsigned long)contentIdentifier.length);
+
+  // Step 5: Generate SPC using Apple's API
+  // WebKit ref: CDMInstanceFairPlayStreamingAVFObjC.mm:1255
+  //   [request makeStreamingContentKeyRequestDataForApp:appIdentifier
+  //            contentIdentifier:contentIdentifier ...]
+  [self makeKeyRequestData:keyRequest
+         certificationData:certData
+         contentIdentifier:contentIdentifier
+                  initData:initData
+                    ticket:ticket];
+}
+
 - (void)updateSessionWithKey:(NSData*)key
                       ticket:(NSInteger)ticket
                    sessionId:(NSData*)sessionId {

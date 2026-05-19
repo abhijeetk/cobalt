@@ -735,26 +735,29 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
             [playerManager starboardPlayerForApplicationPlayer:self];
         NSString* urlString = keyRequest.identifier;
 
-        // Determine init data type from the identifier, matching WebKit's
-        // initTypeForRequest() in
-        // CDMInstanceFairPlayStreamingAVFObjC.mm:207-221. WebKit checks
-        // identifier prefix (not NSURL parsing, which can fail on non-standard
-        // URIs like skd://).
-        //   WebKit: if ([request.identifier hasPrefix:@"skd://"])
-        //               return "skd";
-        // Fallback to "fairplay" for C25/YouTube compatibility.
-        const char* initDataType =
-            [urlString hasPrefix:@"skd://"] ? "skd" : "fairplay";
-
-        // Send raw URI as UTF-8, matching Safari/WebKit behavior
-        // (MediaPlayerPrivateAVFoundationObjC.mm:2206-2208).
-        NSData* uriData = [urlString dataUsingEncoding:NSUTF8StringEncoding];
-        NSLog(@"[ABHIJEET][FPS-FLOW] processKeyRequest: type=%s"
-              @" identifier=%@, length=%lu",
-              initDataType, urlString, (unsigned long)uriData.length);
-        _encryptedMediaFunc(starboardPlayer, _playerContext, initDataType,
-                            static_cast<const unsigned char*>(uriData.bytes),
-                            uriData.length);
+        if (FALSE && [urlString hasPrefix:@"skd://"]) {
+          // WebKit/Safari path: send "skd" with raw UTF-8 URI, matching
+          // WebKit's initTypeForRequest() in
+          // CDMInstanceFairPlayStreamingAVFObjC.mm:207-221 and
+          // MediaPlayerPrivateAVFoundationObjC.mm:2206-2208.
+          NSData* uriData = [urlString dataUsingEncoding:NSUTF8StringEncoding];
+          _encryptedMediaFunc(starboardPlayer, _playerContext, "skd",
+                              static_cast<const unsigned char*>(uriData.bytes),
+                              uriData.length);
+        } else {
+          // C25/YouTube path: send "fairplay" with length-prefixed UTF-16LE
+          // packed identifier, matching C25 application_player.mm:724-733.
+          NSData* urlStringData =
+              [urlString dataUsingEncoding:NSUTF16LittleEndianStringEncoding];
+          uint32_t urlStringDataLength = urlStringData.length;
+          NSMutableData* initData =
+              [NSMutableData dataWithBytes:&urlStringDataLength
+                                    length:sizeof(urlStringDataLength)];
+          [initData appendData:urlStringData];
+          _encryptedMediaFunc(starboardPlayer, _playerContext, "fairplay",
+                              static_cast<const unsigned char*>(initData.bytes),
+                              initData.length);
+        }
       }
     }
   }

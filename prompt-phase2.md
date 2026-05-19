@@ -13,7 +13,7 @@ You are a Senior Software Architect specializing in media stacks and DRM systems
 ## Documentation References (Deep Analysis Required)
 To write this document, you must perform a **deep analysis** of the following sources. Do not simply summarize; you must "mine" these files for subtle technical gaps, threading assumptions, and data format mismatches that are not immediately obvious:
 1. **C25 Legacy:** Refer to `/Users/abhijeet/code/cobalt-github/src/EME-C25-Flow.md` to understand the single-process, direct-callback architecture.
-2. **Phase 1 Reference:** Refer to `/Users/abhijeet/Documents/Design Doc_ URL Player on Chrobalt.md` to match its structure and style perfectly. This is the foundational document for the URL Player project.
+2. **Phase 1 Reference:** Refer to `/Users/abhijeet/code/cobalt-github/src/Phase-1.md` to match its structure and style perfectly. This is the foundational document for the URL Player project.
 3. **Research & Gap Analysis (CRITICAL):** Deeply analyze the following workspace files:
     * `/Users/abhijeet/code/cobalt-github/src/FairPlay-GenerateRequest-Gap-Analysis.md`
     * `/Users/abhijeet/code/cobalt-github/src/ResearchReport.md`

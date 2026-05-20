@@ -9,8 +9,9 @@
         #controls { margin: 10px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         #controls button { background: #222; color: #0f0; border: 1px solid #0f0; padding: 6px 14px;
             font-family: monospace; font-size: 13px; cursor: pointer; }
-        #controls button:hover, #controls button:focus { background: #0f0; color: #000; outline: 2px solid #fff; }
-        #controls button.active { background: #0f0; color: #000; }
+        #controls button:focus { background: #ff0; color: #000; outline: 3px solid #fff; }
+        #controls button.active { border-color: #0f0; border-width: 2px; color: #0f0; font-weight: bold; }
+        #controls button.active:focus { background: #ff0; color: #000; }
         #seek-bar { width: 300px; accent-color: #0f0; }
         #timeline { font-size: 13px; margin: 4px 0; }
         #buffered-info { font-size: 12px; color: #0a0; margin: 2px 0; }
@@ -22,7 +23,7 @@
 </head>
 <body>
     <h3>FairPlay DRM + URL Player (AVPlayer) Test</h3>
-    <video id="video" autoplay controls muted></video>
+    <video id="video" autoplay controls muted tabindex="-1"></video>
 
     <div id="controls">
         <button id="btn-play" tabindex="1">Play</button>
@@ -37,7 +38,7 @@
         <button id="btn-unmute" tabindex="10">Unmute</button>
     </div>
     <div id="timeline">
-        <input type="range" id="seek-bar" min="0" max="100" value="0" step="0.1">
+        <input type="range" id="seek-bar" min="0" max="100" value="0" step="0.1" tabindex="11">
         <span id="time-display">0:00 / 0:00</span>
     </div>
     <div id="buffered-info">Buffered: --</div>
@@ -523,7 +524,40 @@
         log('EVENT: play', 'ok');
     });
 
-    // Update timeline and buffered info every 250ms
+    // Sync button active states with actual video state
+    function updateButtonStates() {
+        var btnPlay = document.getElementById('btn-play');
+        var btnPause = document.getElementById('btn-pause');
+        var btnMute = document.getElementById('btn-mute');
+        var btnUnmute = document.getElementById('btn-unmute');
+
+        // Play/Pause: highlight whichever matches current state
+        if (video.paused) {
+            btnPlay.classList.remove('active');
+            btnPause.classList.add('active');
+        } else {
+            btnPlay.classList.add('active');
+            btnPause.classList.remove('active');
+        }
+
+        // Mute/Unmute: highlight whichever matches current state
+        if (video.muted) {
+            btnMute.classList.add('active');
+            btnUnmute.classList.remove('active');
+        } else {
+            btnMute.classList.remove('active');
+            btnUnmute.classList.add('active');
+        }
+
+        // Rate buttons already handled by highlightRateBtn()
+    }
+
+    // Update on state-change events
+    video.addEventListener('play', function() { updateButtonStates(); });
+    video.addEventListener('pause', function() { updateButtonStates(); });
+    video.addEventListener('volumechange', function() { updateButtonStates(); });
+
+    // Update timeline, buffered info, and button states every 250ms
     setInterval(function() {
         if (video.readyState >= 1) {
             // Update seek bar
@@ -539,6 +573,8 @@
             }
             bufferedInfo.textContent = 'Buffered: ' + (ranges.length > 0 ? ranges.join(', ') : 'none') +
                 ' | readyState=' + video.readyState + ' networkState=' + video.networkState;
+
+            updateButtonStates();
         }
     }, 250);
 
@@ -555,7 +591,8 @@
         }
     }, 5000);
 
-    // Focus the Play button on load for tvOS remote navigation
+    // Initialize button states and focus for tvOS remote navigation
+    updateButtonStates();
     document.getElementById('btn-play').focus();
     log('Focus set to Play button for tvOS remote navigation', 'ok');
     })();

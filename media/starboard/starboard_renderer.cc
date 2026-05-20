@@ -1148,6 +1148,12 @@ void StarboardRenderer::OnPlayerStatus(SbPlayerState state) {
         if (duration > TimeDelta() && duration_change_cb_) {
           duration_change_cb_.Run(duration);
         }
+
+        // Re-apply volume to native player. SetVolume() may have been called
+        // before the AVPlayer was created (e.g. <video muted> sets volume=0
+        // during init), so the value was stored but never reached AVPlayer.
+        LOG(INFO) << "[Phase3-Play-Pause] Re-applying volume: " << volume_;
+        player_bridge_->SetVolume(volume_);
       }
 #endif  // SB_HAS(PLAYER_WITH_URL)
       break;

@@ -1,9 +1,9 @@
-# Design Doc: URL Player Phase 3 — Media Control & Pipeline Integration
+# Design Doc: URL Player Phase 3 -- Media Control & Pipeline Integration
 
 **Context:** Phase 1 and 2 focused on architecture and DRM. Phase 3 ensures that the URL Player (AVPlayer) behaves as a fully integrated HTML5 Media Element within the Chrobalt pipeline.
 
 ## 1. Objectives
-*   **Command Mapping:** Bind HTML5 Media API calls (`play()`, `pause()`, `seek()`, `playbackRate`) to native `AVPlayer` methods.
+*   **Command Mapping:** Bind HTML5 Media API calls (`play()`, `pause()`, `seek()`, `playbackRate`, `volume`, `muted`) to native `AVPlayer` methods.
 *   **State Synchronization:** Map native `AVPlayerItem` status changes back to Chromium `ReadyState` and `NetworkState`.
 *   **Buffering & Progress:** Accurately report `buffered` ranges and `currentTime` from the native player to the web app.
 *   **QoE & Metrics:** Forward hardware-reported dropped frames and quality-of-service stats to Chromium's `PipelineStatistics`.
@@ -17,32 +17,163 @@ The integration uses a **Dual-Proxy** model over Mojo:
 ## 3. Key Implementation Areas
 
 ### A. Playback Controls (The Command Path)
-*   **Seek:** Map `WebMediaPlayerImpl::Seek` to `SbPlayerSeek`. Handle `AVPlayer`'s asynchronous `seekToTime:completionHandler:` to correctly trigger the `OnPipelineSeeked` callback in the Renderer.
-*   **Rate:** Map `setRate()` to `AVPlayer.rate`.
+
+All playback commands flow through the standard `mojom::Renderer` interface (not the extension). The pipeline rate controls both play and pause:
+
+**Play/Pause via SetPlaybackRate:**
+```
+JS video.play() / video.pause()
+  -> HTMLMediaElement::UpdatePlayState()
+    -> WebMediaPlayerImpl::Play() [SetPlaybackRate(1.0)]
+       WebMediaPlayerImpl::Pause() [SetPlaybackRate(0.0)]
+      -> PipelineController::SetPlaybackRate()
+        -> PipelineImpl::RendererWrapper::SetPlaybackRate()
+          [only forwarded when state_ == kPlaying]
+          -> MojoRenderer::SetPlaybackRate() -> Mojo IPC
+            -> StarboardRendererWrapper::SetPlaybackRate()
+              -> StarboardRenderer::SetPlaybackRate()
+                -> SbPlayerBridge::SetPlaybackRate()
+                  -> SbPlayerSetPlaybackRate()
+                    -> ApplicationPlayer.playbackRate = rate
+                      -> AVPlayer.rate = rate (0.0=pause, 1.0=play)
+```
+
+**Key discovery:** In C25, playback was controlled exclusively via `SetPlaybackRate()`. The native `[player play]` was never called in ReadyToPlay. A `[player play]` call was added during the Chrobalt port as a workaround (commit `be4f6302beb28`), but this bypassed Chromium's pipeline, creating a rate mismatch where the native AVPlayer was playing at rate=1 but Chromium thought rate=0. This made `video.pause()` a no-op because StarboardRenderer saw rate as "already 0" and skipped forwarding. Fix: removed `[player play]`, removed rate-unchanged guards, let pipeline be the sole authority.
+
+**Seek:**
+```
+JS video.currentTime = X
+  -> WebMediaPlayerImpl::DoSeek()
+    -> PipelineController::Seek()
+      -> StarboardRenderer::StartPlayingFrom(time)
+        -> SbPlayerBridge::Seek()
+          -> SbPlayerSeek()
+            -> AVPlayer.seekToTime:toleranceBefore:toleranceAfter:
+```
+
+Seek works end-to-end via the standard pipeline path. No URL-player-specific changes were needed.
+
+**Volume/Mute:**
+```
+JS video.muted = true / video.volume = X
+  -> HTMLMediaElement -> WebMediaPlayerImpl::SetVolume(0.0 / X)
+    -> PipelineController::SetVolume()
+      -> StarboardRenderer::SetVolume()
+        -> SbPlayerBridge::SetVolume()
+          -> SbPlayerSetVolume()
+            -> AVPlayer.volume = X
+```
+
+**Key discovery:** The `<video muted>` attribute sets volume=0 during pipeline init, BEFORE the AVPlayer is created. The `ApplicationPlayer.volume = 0` call becomes a no-op because `_player` is nil. AVPlayer then starts with default volume=1. Fix: re-apply stored `volume_` in `StarboardRenderer::OnPlayerStatus(kSbPlayerStatePresenting)` after AVPlayer is confirmed ready.
 
 ### B. State Mapping (The Observation Path)
-Map native `AVPlayer` statuses to Chromium `ReadyState`:
-*   `AVPlayerItemStatusReadyToPlay` → `kReadyStateHaveEnoughData`
-*   `AVPlayerTimeControlStatusWaitingToPlayAtSpecifiedRate` → `kReadyStateHaveCurrentData` (Buffering)
-*   `AVPlayerTimeControlStatusPlaying` → `kReadyStateHaveEnoughData`
+
+**ReadyState progression:**
+*   `kSbPlayerStateInitialized` -> pipeline init callback, `readyState=1` (HAVE_METADATA)
+*   `kSbPlayerStatePrerolling` -> no readyState change
+*   `kSbPlayerStatePresenting` -> `BUFFERING_HAVE_ENOUGH` -> `readyState=4` (HAVE_ENOUGH_DATA)
+
+**Key discovery:** `BUFFERING_HAVE_ENOUGH` triggers `SetReadyState(CanPlayThrough() ? kHaveEnoughData : kHaveFutureData)`. For URL players, `CanPlayThrough()` returned false because the DoLoad bypass skips DataSource creation, so `buffered_data_source_host_->CanPlayThrough()` had nothing to query. This capped readyState at 3, preventing autoplay (which requires readyState=4). Fix: added `kUrlPlayerDemuxer` to the DemuxerType enum and return true from `CanPlayThrough()` for URL players since AVPlayer manages its own buffering.
+
+**Autoplay:**
+```
+HTMLMediaElement::SetReadyState(kHaveEnoughData)
+  -> autoplay_policy_->RequestAutoplayByAttribute()
+    -> paused_ = false
+    -> UpdatePlayState()
+      -> web_media_player_->Play()  [triggers SetPlaybackRate(1.0)]
+```
+
+Autoplay only triggers at `readyState=4`. The `kUrlPlayerDemuxer` + `CanPlayThrough()` fix was essential.
 
 ### C. Buffering & Timeline
-*   **Buffered Ranges:** Poll `AVPlayerItem.loadedTimeRanges` in the GPU process and send to the Renderer via Mojo to populate `WebMediaPlayerImpl::Buffered()`.
-*   **Time Tracking:** High-frequency polling of `AVPlayer.currentTime` for the Renderer-side `GetMediaTime` call.
+
+**Buffered Ranges (GPU -> Renderer -> JS):**
+```
+AVPlayer.loadedTimeRanges
+  -> SbPlayerBridge::GetUrlPlayerBufferedTimeRanges()
+    -> StarboardRenderer::GetMediaTime() [periodic poll]
+      -> buffered_ranges_cb_
+        -> StarboardRendererWrapper::OnBufferedTimeRangesChange()
+          -> Mojo IPC (OnBufferedTimeRangesChange in renderer_extensions.mojom)
+            -> StarboardRendererClient::OnBufferedTimeRangesChange()
+              -> DemuxerManager::SetBufferedTimeRanges()
+                -> UrlPlayerDemuxer::SetBufferedTimeRanges()
+                  -> DemuxerHost::OnBufferedTimeRangesChanged()
+                    -> PipelineImpl shared_state_.buffered_time_ranges
+                      -> JS video.buffered
+```
+
+Polled in `GetMediaTime()` which runs on a periodic timer via `MojoRendererService`.
+
+**CurrentTime (already working):**
+```
+MojoRendererService timer -> renderer_->GetMediaTime()
+  -> StarboardRenderer::GetMediaTime()
+    -> SbPlayerBridge::GetInfo()
+      -> SbPlayerGetInfo -> applicationPlayer.currentMediaTime
+        -> AVPlayer.currentTime
+  -> OnTimeUpdate(time, max_time) via Mojo
+    -> MojoRenderer::media_time_interpolator_.SetBounds()
+      -> JS video.currentTime (interpolated between polls)
+```
+
+**Duration (GPU -> Mojo -> DemuxerHost -> Pipeline -> JS):**
+```
+AVPlayer.duration
+  -> SbPlayerBridge::GetDuration()
+    -> StarboardRenderer::OnPlayerStatus(kPresenting)
+      -> duration_change_cb_
+        -> StarboardRendererWrapper::OnDurationChange()
+          -> Mojo IPC (OnDurationChange in renderer_extensions.mojom)
+            -> StarboardRendererClient::OnDurationChange()
+              -> DemuxerManager::SetDuration()
+                -> UrlPlayerDemuxer::SetDuration()
+                  -> DemuxerHost::SetDuration()
+                    -> PipelineImpl::OnDurationChange()
+                      -> WebMediaPlayerImpl::OnDurationChange()
+                        -> JS video.duration
+```
+
+**Key discovery:** The `OnDurationChange` Mojo callback existed in `renderer_extensions.mojom` but was a TODO stub in `StarboardRendererClient`. Duration normally comes from the demuxer via `DemuxerHost::SetDuration()`. For URL players, the `UrlPlayerDemuxer` doesn't parse media, so duration must be pushed from the GPU side. We added `UrlPlayerDemuxer::SetDuration()` and `SetBufferedTimeRanges()` which call through to the `DemuxerHost`.
 
 ### D. Natural Size & Rendering
-*   **Punch-Out View:** Forward `presentationSize` from the GPU process to the Renderer via `OnVideoNaturalSizeChange` to ensure the "Video Hole" (transparency) is correctly sized.
+*   **Punch-Out View:** Forward `presentationSize` from the GPU process to the Renderer via `OnVideoNaturalSizeChange` to ensure the "Video Hole" (transparency) is correctly sized. Already working.
 
-## 4. Challenges
-*   **Mojo Latency:** Minimizing lag between GPU-reported time and Renderer-side queries.
+### E. URL Player Demuxer (kUrlPlayerDemuxer)
+
+The `UrlPlayerDemuxer` is a stub demuxer that satisfies Chromium's pipeline requirements without actually demuxing. AVPlayer handles all network, demuxing, and decoding natively.
+
+*   **DemuxerType:** `kUrlPlayerDemuxer = 8` (added to enum, mojom, traits, histograms)
+*   **GetMediaUrl():** Returns the HLS URL for `StarboardRendererClient` to pass via `SetSourceUrl`
+*   **SetDuration() / SetBufferedTimeRanges():** Push data from GPU side to `DemuxerHost`
+*   **Initialize():** Immediately succeeds (no media to parse)
+*   **GetAllStreams():** Returns stub audio+video streams with minimal configs
+
+Previously used `kUnknownDemuxer` which was ambiguous and made `CanPlayThrough()` return false.
+
+## 4. Timing Patterns: Pre-AVPlayer Init
+
+Several properties are set by Chromium BEFORE the native AVPlayer is created. This is a recurring pattern for URL players because player creation is deferred to `CreatePlayerBridge()` which runs after Mojo setup.
+
+| Property | When Set by Chromium | When AVPlayer Created | Fix |
+|----------|---------------------|----------------------|-----|
+| Volume (muted) | Pipeline init | After `CreatePlayerBridge()` in `OnSbWindowHandleReady` | Re-apply in `OnPlayerStatus(kPresenting)` |
+| PlaybackRate | Pipeline init (rate=0, paused) | Same | Rate stored in `playback_rate_`, applied when pipeline calls `Play()` |
+
+Any new properties that need to survive across this gap should follow the same pattern: store in `StarboardRenderer`, re-apply in `OnPlayerStatus(kSbPlayerStatePresenting)`.
+
+## 5. Challenges
+*   **Mojo Latency:** Minimizing lag between GPU-reported time and Renderer-side queries. Mitigated by `MediaTimeInterpolator` in `MojoRenderer`.
 *   **End-of-Stream (EOS):** Mapping `AVPlayerItemDidPlayToEndTimeNotification` to Chromium's `OnEnded()`.
 *   **Error Mapping:** Translating native CoreMedia errors (e.g., `-19152`) to Chromium `PipelineStatus`.
 
-## 5. Completed Tasks
+## 6. Completed Tasks
 
 | Task | Commit | Description |
 |------|--------|-------------|
-| Play/Pause Pipeline Fix | `1ec791ec58714` | Fixed rate mismatch between native AVPlayer and Chromium pipeline. Removed direct `[player play]` from ReadyToPlay handler (was bypassing pipeline, added during Chrobalt port, not present in C25). Removed rate-unchanged early-out guards in StarboardRenderer and ApplicationPlayer so SetPlaybackRate always reaches AVPlayer. Added `[Phase3-Play-Pause]` trace logging across all 8 pipeline layers (WebMediaPlayerImpl, PipelineImpl, MojoRenderer, StarboardRendererWrapper, StarboardRenderer, SbPlayerBridge, SbPlayerSetPlaybackRate, ApplicationPlayer). Added playback control test page with tvOS remote navigation (play, pause, seek, rate, mute buttons with tabindex focus management). |
-| Autoplay Fix + kUrlPlayerDemuxer | `08a8353950213` | Added `kUrlPlayerDemuxer` to DemuxerType enum (value 8) replacing `kUnknownDemuxer` for URL players. Fixed autoplay by returning true from `CanPlayThrough()` for URL player demuxer, allowing readyState to reach `kHaveEnoughData` (4) which triggers `RequestAutoplayByAttribute()`. Root cause: DoLoad bypass skips DataSource creation for HLS URLs, so `buffered_data_source_host_->CanPlayThrough()` returned false, capping readyState at 3. Updated mojom, traits, histograms. |
-| Duration + CurrentTime Reporting | `3f68b26b40efe` | Wired duration from native AVPlayer through 7-layer callback chain to JS. OnDurationChange Mojo callback was a TODO stub. CurrentTime already flows via MojoRendererService periodic timer polling StarboardRenderer::GetMediaTime(). |
-| Buffered Ranges + Seek | `pending` | Added OnBufferedTimeRangesChange Mojo message. Polled in StarboardRenderer::GetMediaTime() from SbPlayerBridge::GetUrlPlayerBufferedTimeRanges(). Forwarded via Mojo to UrlPlayerDemuxer -> DemuxerHost::OnBufferedTimeRangesChanged(). Seek already worked end-to-end via standard pipeline. |
+| Play/Pause Pipeline Fix | `1ec791ec58714` | Removed `[player play]` from ReadyToPlay (not in C25). Removed rate-unchanged guards. Added `[Phase3-Play-Pause]` trace logging across all 8 layers. Added test page with tvOS remote navigation. |
+| Autoplay + kUrlPlayerDemuxer | `08a8353950213` | Added `kUrlPlayerDemuxer` enum. Fixed `CanPlayThrough()` for URL players. readyState now reaches 4, autoplay triggers. |
+| Duration + CurrentTime | `3f68b26b40efe` | Implemented `OnDurationChange` Mojo callback (was TODO stub). Added `UrlPlayerDemuxer::SetDuration()`. CurrentTime already worked via periodic timer. |
+| Buffered Ranges + Seek | `5a1c75989ba04` | Added `OnBufferedTimeRangesChange` Mojo message. Polled in `GetMediaTime()`. Seek already worked. |
+| Muted/Volume Init Fix | `pending` | Re-apply stored `volume_` in `OnPlayerStatus(kPresenting)` after AVPlayer is created. |

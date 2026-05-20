@@ -498,9 +498,15 @@ void PipelineImpl::RendererWrapper::Resume(
 void PipelineImpl::RendererWrapper::SetPlaybackRate(double playback_rate) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
+  LOG(INFO) << "[Phase3-Play-Pause] PipelineImpl::RendererWrapper::"
+            << "SetPlaybackRate(" << playback_rate << "), state="
+            << GetStateString(state_);
   playback_rate_ = playback_rate;
   if (state_ == State::kPlaying) {
     shared_state_.renderer->SetPlaybackRate(playback_rate_);
+  } else {
+    LOG(WARNING) << "[Phase3-Play-Pause] NOT forwarding rate to renderer, "
+                 << "state is not kPlaying";
   }
 
   if (state_ != State::kCreated && state_ != State::kStopping &&

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>FairPlay URL Player Test</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+        video { width: 960px; height: 540px; background: #111; }
+        #controls { margin: 10px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        #controls button { background: #222; color: #0f0; border: 1px solid #0f0; padding: 6px 14px;
+            font-family: monospace; font-size: 13px; cursor: pointer; }
+        #controls button:hover, #controls button:focus { background: #0f0; color: #000; outline: 2px solid #fff; }
+        #controls button.active { background: #0f0; color: #000; }
+        #seek-bar { width: 300px; accent-color: #0f0; }
+        #timeline { font-size: 13px; margin: 4px 0; }
+        #buffered-info { font-size: 12px; color: #0a0; margin: 2px 0; }
+        #log { white-space: pre-wrap; font-size: 12px; max-height: 400px; overflow-y: auto; margin-top: 10px; }
+        .error { color: #f00; }
+        .warn { color: #ff0; }
+        .ok { color: #0f0; }
+    </style>
+</head>
+<body>
+    <h3>FairPlay DRM + URL Player (AVPlayer) Test</h3>
+    <video id="video" autoplay controls muted></video>
+
+    <div id="controls">
+        <button id="btn-play" tabindex="1">Play</button>
+        <button id="btn-pause" tabindex="2">Pause</button>
+        <button id="btn-seek-back" tabindex="3">-10s</button>
+        <button id="btn-seek-fwd" tabindex="4">+10s</button>
+        <button id="btn-rate-05" tabindex="5">0.5x</button>
+        <button id="btn-rate-1" tabindex="6" class="active">1x</button>
+        <button id="btn-rate-15" tabindex="7">1.5x</button>
+        <button id="btn-rate-2" tabindex="8">2x</button>
+        <button id="btn-mute" tabindex="9">Mute</button>
+        <button id="btn-unmute" tabindex="10">Unmute</button>
+    </div>
+    <div id="timeline">
+        <input type="range" id="seek-bar" min="0" max="100" value="0" step="0.1">
+        <span id="time-display">0:00 / 0:00</span>
+    </div>
+    <div id="buffered-info">Buffered: --</div>
+    <div id="log" tabindex="-1"></div>
+
+    <script>
+    (function() {
+    // Axinom FairPlay test configuration
+    //
+    // Stream details (from HLS manifest):
+    //   Container: CMAF (fMP4 segments) delivered via HLS (application/x-mpegURL)
+    //   Encryption: CBCS (Common encryption with CBC mode and subsample patterns)
+    //   Video: H.264 High Profile
+    //     - 288p (avc1.640015), 360p (avc1.64001e), 480p (avc1.64001e),
+    //       720p (avc1.64001f), 1080p (avc1.640028) @ 24fps
+    //   Audio: AAC-LC (mp4a.40.2), stereo
+    //
+    // EME capability query uses video/mp4 + avc1.42E01E (Baseline Profile L3.0)
+    // which is less specific than the actual stream (High Profile). This is fine
+    // because requestMediaKeySystemAccess is a capability probe, not a stream match.
+    // The container format (video/mp4 vs application/x-mpegURL) only matters for
+    // routing to URL player vs SbPlayer at actual playback time, not during the
+    // EME capability query.
+    //
+    // encryptionScheme: 'cbcs' is REQUIRED. Without it, Chromium defaults to 'cenc'
+    // which FairPlay does not support, causing silent rejection.
+    //
+    //
+    // initDataTypes: ['skd', 'sinf', 'cenc']
+    //   FairPlay uses 'skd' and 'sinf' as init data types (per WebKit source:
+    //   CDMFairPlayStreaming.cpp). WebKit treats these as first-class types with
+    //   dedicated sanitize/extract handlers. Chromium has no enum values for them
+    //   (only CENC, KEYIDS, WEBM), so 'skd' and 'sinf' map to EmeInitDataType::UNKNOWN.
+    //   Our FairplayKeySystemInfo accepts UNKNOWN to make this work.
+    //   'cenc' is included for PSSH-box-based init data (conditionally supported
+    //   in WebKit behind HAVE(FAIRPLAYSTREAMING_CENC_INITDATA) flag).
+    //   WebKit also supports 'mpts' behind HAVE(FAIRPLAYSTREAMING_MTPS_INITDATA).
+    //
+    // IMPORTANT: 'cenc' appears in two different EME contexts with different meanings:
+    //   1. initDataTypes: ['cenc'] - refers to PSSH box format (ISO 23001-7),
+    //      i.e. how key IDs and DRM metadata are packaged. Not about encryption mode.
+    //   2. encryptionScheme: 'cenc' - refers to AES-CTR full-sample encryption mode.
+    //      The alternative is 'cbcs' (AES-CBC with subsample patterns).
+    //   FairPlay ONLY supports 'cbcs' encryption scheme. It does NOT support 'cenc'
+    //   encryption. If encryptionScheme is omitted, Chromium defaults to 'cenc',
+    //   which causes silent rejection by FairplayKeySystemInfo.
+    //
+    var CONFIG = {
+        // FairPlay-encrypted HLS stream (CBCS)
+        streamUrl: 'https://media.axprod.net/TestVectors/Cmaf/protected_1080p_h264_cbcs/manifest.m3u8',
+
+        // Axinom FairPlay license server + JWT token
+        licenseUrl: 'https://drm-fairplay-licensing.axprod.net/AcquireLicense',
+        licenseToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ2ZXJzaW9uIjoxLCJjb21fa2V5X2lkIjoiNjllNTQwODgtZTllMC00NTMwLThjMWEtMWViNmRjZDBkMTRlIiwibWVzc2FnZSI6eyJ0eXBlIjoiZW50aXRsZW1lbnRfbWVzc2FnZSIsInZlcnNpb24iOjIsImxpY2Vuc2UiOnsiZmFpcnBsYXkiOnsiaWdub3JlX2tleXNfaW5fbGljZW5zZV9yZXF1ZXN0Ijp0cnVlfX0sImNvbnRlbnRfa2V5c19zb3VyY2UiOnsiaW5saW5lIjpbeyJpZCI6IjMwMmY4MGRkLTQxMWUtNDg4Ni1iY2E1LWJiMWY4MDE4YTAyNCIsImVuY3J5cHRlZF9rZXkiOiJyb0tBZzB0N0ppMWk0M2Z3dit6ZnRRPT0iLCJpdiI6ImQvMFlpYXIwRkRzSVZVaXp3UGxibWc9PSJ9XX19fQ.NL2btcHvRpeZGnJXrOdyNbNZOLl7Osl9TlGPlb-3a60',
+
+        // Axinom FairPlay certificate URL
+        certificateUrl: 'https://tools.axinom.com/FPScert/fairplay.cer',
+
+        // Key system identifiers to try
+        keySystems: ['com.youtube.fairplay', 'com.apple.fps', 'com.apple.fps.1_0', 'com.apple.fps.2_0']
+    };
+
+    var logEl = document.getElementById('log');
+    function log(msg, cls) {
+        var line = '[' + new Date().toISOString().substr(11, 12) + '] ' + msg;
+        console.log(line);
+        var span = document.createElement('span');
+        span.className = cls || '';
+        span.textContent = line + '\n';
+        logEl.appendChild(span);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    var video = document.getElementById('video');
+    var certificate = null;
+    var keySystemUsed = null;
+
+    // Step 0: Check MIME type support (prerequisite)
+    log('--- Prerequisite: MIME Type Support ---');
+    // MIME checks match the actual stream codecs from CONFIG.streamUrl:
+    //   Video: H.264 High Profile (avc1.640028 = Level 4.0, used for 1080p)
+    //   Audio: AAC-LC (mp4a.40.2, stereo)
+    // Also test bare MIME type and Baseline Profile (avc1.42E01E) as a
+    // minimal capability probe.
+    var mimeChecks = [
+        'application/x-mpegURL',
+        'application/x-mpegURL; codecs="avc1.42E01E"',
+        'application/x-mpegURL; codecs="avc1.640028"',
+        'application/x-mpegURL; codecs="mp4a.40.2"',
+        'application/x-mpegURL; codecs="avc1.640028, mp4a.40.2"'
+    ];
+    var hlsSupported = false;
+    mimeChecks.forEach(function(mime) {
+        var result = video.canPlayType(mime);
+        log('canPlayType("' + mime + '") = "' + result + '"',
+            result ? 'ok' : 'error');
+        if (result) hlsSupported = true;
+    });
+
+    // MediaSource.isTypeSupported() checks whether MSE (SourceBuffer-based)
+    // playback supports a given MIME type. Results vary by platform:
+    //
+    //   Cobalt (tvOS): returns TRUE because Cobalt's Starboard integration
+    //     bypasses Chromium's standard MSE MIME checks and delegates directly
+    //     to SbMediaCanPlayMimeAndKeySystem(), which reports HLS as supported.
+    //
+    //   Stock Chromium: returns FALSE because upstream MSE does not list
+    //     application/x-mpegURL as a supported container.
+    //
+    //   Safari: returns FALSE because Safari handles HLS natively via
+    //     video.src, not through MSE.
+    //
+    // We log this for diagnostics only. Playback decisions are based solely
+    // on canPlayType(), not isTypeSupported(), so this page works correctly
+    // on both Cobalt and Safari regardless of the MSE result.
+    if (typeof MediaSource !== 'undefined') {
+        mimeChecks.forEach(function(mime) {
+            var result = MediaSource.isTypeSupported(mime);
+            log('MediaSource.isTypeSupported("' + mime + '") = ' + result);
+        });
+    } else {
+        log('MediaSource API not available');
+    }
+
+    if (!hlsSupported) {
+        log('FATAL: canPlayType reports no HLS support. Aborting.', 'error');
+        return;
+    }
+    log('---');
+
+    // Step 1: Set src to trigger URL player path
+    log('Setting video.src to FairPlay HLS stream...', 'ok');
+    log('URL: ' + CONFIG.streamUrl);
+    video.src = CONFIG.streamUrl;
+
+    // Queued encrypted events to process after EME setup
+    var pendingEncryptedEvents = [];
+    var mediaKeys = null;
+    var emeSetupStarted = false;
+    var emeSetupDone = false;
+
+    // Step 2: Listen for events that signal encrypted content
+    video.addEventListener('encrypted', function(event) {
+        log('EVENT: encrypted - initDataType=' + event.initDataType +
+            ' initData.byteLength=' + (event.initData ? event.initData.byteLength : 'null'), 'ok');
+        if (emeSetupDone && mediaKeys) {
+            handleEncryptedEvent(event);
+        } else {
+            pendingEncryptedEvents.push(event);
+            setupEME();
+        }
+    });
+
+    video.addEventListener('waitingforkey', function(event) {
+        log('EVENT: waitingforkey - CDM needed!', 'warn');
+        setupEME();
+    });
+
+    // Also try proactive EME setup after a short delay
+    setTimeout(function() {
+        if (!keySystemUsed) {
+            log('Timeout: attempting proactive EME setup...', 'warn');
+            setupEME();
+        }
+    }, 3000);
+
+    // Monitor video state
+    video.addEventListener('loadstart', function() { log('EVENT: loadstart'); });
+    video.addEventListener('loadedmetadata', function() { log('EVENT: loadedmetadata'); });
+    video.addEventListener('canplay', function() { log('EVENT: canplay', 'ok'); });
+    video.addEventListener('playing', function() { log('EVENT: playing', 'ok'); });
+    video.addEventListener('error', function() {
+        var e = video.error;
+        log('EVENT: error - code=' + (e ? e.code : '?') + ' message=' + (e ? e.message : '?'), 'error');
+    });
+    video.addEventListener('stalled', function() { log('EVENT: stalled', 'warn'); });
+    video.addEventListener('waiting', function() { log('EVENT: waiting'); });
+
+    // Pack three length-prefixed fields for Cobalt's generateRequest():
+    //   [4 bytes: initData length | initData (skd:// URL, UTF-16LE)]
+    //   [4 bytes: contentID length | contentID]
+    //   [4 bytes: certData length  | certData (FairPlay server certificate)]
+    // See drm_generate_session_update_request.mm:78-87.
+    function packFairPlayInitData(skdUrl, contentId, certData) {
+        // Encode skd:// URL as UTF-16LE
+        var skdUtf16 = new ArrayBuffer(skdUrl.length * 2);
+        var skdView = new Uint16Array(skdUtf16);
+        for (var i = 0; i < skdUrl.length; i++) {
+            skdView[i] = skdUrl.charCodeAt(i);
+        }
+
+        // Encode contentId as UTF-8
+        var encoder = new TextEncoder();
+        var contentIdBytes = encoder.encode(contentId);
+
+        var totalLen = 4 + skdUtf16.byteLength +
+                       4 + contentIdBytes.byteLength +
+                       4 + certData.byteLength;
+        var packed = new ArrayBuffer(totalLen);
+        var view = new DataView(packed);
+        var offset = 0;
+
+        // Field 1: initData (skd:// URL, UTF-16LE)
+        view.setUint32(offset, skdUtf16.byteLength, true);
+        offset += 4;
+        new Uint8Array(packed, offset, skdUtf16.byteLength).set(new Uint8Array(skdUtf16));
+        offset += skdUtf16.byteLength;
+
+        // Field 2: contentID
+        view.setUint32(offset, contentIdBytes.byteLength, true);
+        offset += 4;
+        new Uint8Array(packed, offset, contentIdBytes.byteLength).set(contentIdBytes);
+        offset += contentIdBytes.byteLength;
+
+        // Field 3: certData (FairPlay server certificate)
+        view.setUint32(offset, certData.byteLength, true);
+        offset += 4;
+        new Uint8Array(packed, offset, certData.byteLength).set(new Uint8Array(certData));
+
+        return packed;
+    }
+
+    // Extract skd:// URL from Cobalt's "fairplay" init data.
+    // Format from application_player.mm: [4 bytes: length (LE) | UTF-16LE string]
+    function extractSkdUrlFromFairPlayInitData(initData) {
+        var view = new DataView(initData);
+        var len = view.getUint32(0, true);
+        var utf16 = new Uint16Array(initData, 4, len / 2);
+        return String.fromCharCode.apply(null, utf16);
+    }
+
+    // Extract contentID from a skd:// URL: "skd://contentID" -> "contentID"
+    function extractContentId(skdUrl) {
+        var idx = skdUrl.indexOf('://');
+        return idx >= 0 ? skdUrl.substring(idx + 3) : skdUrl;
+    }
+
+    // Handle a single encrypted event: create session, generate request,
+    // fetch license, update session.
+    async function handleEncryptedEvent(event) {
+        try {
+            log('Creating MediaKeySession for initDataType=' + event.initDataType, 'ok');
+            var session = mediaKeys.createSession();
+
+            session.addEventListener('message', async function(msgEvent) {
+                log('SESSION message: type=' + msgEvent.messageType +
+                    ' byteLength=' + msgEvent.message.byteLength, 'ok');
+
+                // Send SPC (Server Playback Context) to license server
+                var licenseUrl = CONFIG.licenseUrl + '?AxDrmMessage=' + CONFIG.licenseToken;
+                log('Sending license request to: ' + CONFIG.licenseUrl);
+
+                try {
+                    var response = await fetch(licenseUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/octet-stream' },
+                        body: msgEvent.message
+                    });
+
+                    if (!response.ok) {
+                        log('License server error: ' + response.status + ' ' + response.statusText, 'error');
+                        var body = await response.text();
+                        log('Response body: ' + body.substring(0, 200), 'error');
+                        return;
+                    }
+
+                    var licenseData = await response.arrayBuffer();
+                    log('License received, size=' + licenseData.byteLength + ' bytes', 'ok');
+
+                    await session.update(new Uint8Array(licenseData));
+                    log('Session updated with license - key should be active!', 'ok');
+                } catch (fetchErr) {
+                    log('License fetch error: ' + fetchErr.message, 'error');
+                }
+            });
+
+            session.addEventListener('keystatuseschange', function() {
+                log('SESSION keystatuseschange:', 'ok');
+                session.keyStatuses.forEach(function(status, keyId) {
+                    var keyIdHex = Array.from(new Uint8Array(keyId))
+                        .map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+                    log('  Key ' + keyIdHex + ' status=' + status,
+                        status === 'usable' ? 'ok' : 'warn');
+                });
+            });
+
+            // Build init data for generateRequest based on initDataType.
+            var requestInitData;
+            var requestType = event.initDataType;
+
+            if (event.initDataType === 'fairplay') {
+                // Cobalt AVPlayer path: init data is [4B len | UTF-16LE skd:// URL].
+                // Repack as [initData | contentID | certData] for
+                // SBDApplicationDrmSystem's generateSessionUpdateRequest.
+                var skdUrl = extractSkdUrlFromFairPlayInitData(event.initData);
+                var contentId = extractContentId(skdUrl);
+                log('FairPlay initData: skdUrl=' + skdUrl + ', contentId=' + contentId, 'ok');
+                requestInitData = packFairPlayInitData(skdUrl, contentId, certificate);
+                log('Packed generateRequest data: ' + requestInitData.byteLength + ' bytes', 'ok');
+            } else {
+                // Other types (skd, sinf, cenc): pass through as-is.
+                requestInitData = event.initData;
+            }
+
+            log('Calling session.generateRequest(' + requestType + ', ' +
+                requestInitData.byteLength + ' bytes)...');
+            await session.generateRequest(requestType, requestInitData);
+            log('generateRequest completed', 'ok');
+
+        } catch (error) {
+            log('handleEncryptedEvent error: ' + error.message, 'error');
+            log('Stack: ' + error.stack, 'error');
+        }
+    }
+
+    async function setupEME() {
+        if (emeSetupStarted) return;
+        emeSetupStarted = true;
+        log('--- EME Setup Starting ---', 'ok');
+
+        try {
+            // Fetch FairPlay certificate from Axinom
+            log('Fetching FairPlay certificate from ' + CONFIG.certificateUrl + '...');
+            var certResponse = await fetch(CONFIG.certificateUrl);
+            if (!certResponse.ok) {
+                log('Certificate fetch failed: ' + certResponse.status, 'error');
+                return;
+            }
+            certificate = await certResponse.arrayBuffer();
+            log('Certificate fetched, size=' + certificate.byteLength + ' bytes', 'ok');
+
+            // Try each key system
+            var access = null;
+            for (var i = 0; i < CONFIG.keySystems.length; i++) {
+                var ks = CONFIG.keySystems[i];
+                try {
+                    log('Trying requestMediaKeySystemAccess("' + ks + '")...');
+                    access = await navigator.requestMediaKeySystemAccess(ks, [{
+                        initDataTypes: ['fairplay', 'skd', 'sinf', 'cenc'],
+                        videoCapabilities: [{
+                            contentType: 'video/mp4; codecs="avc1.42E01E"',
+                            encryptionScheme: 'cbcs'
+                        }],
+                        audioCapabilities: [{
+                            contentType: 'audio/mp4; codecs="mp4a.40.2"',
+                            encryptionScheme: 'cbcs'
+                        }]
+                    }]);
+                    keySystemUsed = ks;
+                    log('Key system accepted: ' + ks, 'ok');
+                    break;
+                } catch (e) {
+                    log('Key system "' + ks + '" not supported: ' + e.message, 'warn');
+                }
+            }
+
+            if (!access) {
+                log('No supported FairPlay key system found!', 'error');
+                return;
+            }
+
+            // Create MediaKeys
+            log('Creating MediaKeys...');
+            mediaKeys = await access.createMediaKeys();
+            log('MediaKeys created', 'ok');
+
+            // Set server certificate
+            log('Setting server certificate...');
+            var certSet = await mediaKeys.setServerCertificate(new Uint8Array(certificate));
+            log('Server certificate set: ' + certSet, 'ok');
+
+            // Attach to video element (this triggers SetCdm in StarboardRenderer)
+            log('Calling video.setMediaKeys()... (triggers SetCdm -> SetDrmSystem)');
+            await video.setMediaKeys(mediaKeys);
+            log('MediaKeys attached to video element!', 'ok');
+
+            emeSetupDone = true;
+            log('--- EME Setup Complete ---', 'ok');
+
+            // Process any queued encrypted events
+            if (pendingEncryptedEvents.length > 0) {
+                log('Processing ' + pendingEncryptedEvents.length + ' queued encrypted event(s)...');
+                for (var i = 0; i < pendingEncryptedEvents.length; i++) {
+                    await handleEncryptedEvent(pendingEncryptedEvents[i]);
+                }
+                pendingEncryptedEvents = [];
+            }
+
+        } catch (error) {
+            log('EME Setup Error: ' + error.message, 'error');
+            log('Stack: ' + error.stack, 'error');
+        }
+    }
+
+    // --- Playback Controls ---
+    var seekBar = document.getElementById('seek-bar');
+    var timeDisplay = document.getElementById('time-display');
+    var bufferedInfo = document.getElementById('buffered-info');
+    var isSeeking = false;
+
+    function fmtTime(s) {
+        if (!isFinite(s)) return '--:--';
+        var m = Math.floor(s / 60);
+        var sec = Math.floor(s % 60);
+        return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    function highlightRateBtn(rate) {
+        var map = {0.5: 'btn-rate-05', 1: 'btn-rate-1', 1.5: 'btn-rate-15', 2: 'btn-rate-2'};
+        Object.values(map).forEach(function(id) {
+            document.getElementById(id).classList.remove('active');
+        });
+        if (map[rate]) document.getElementById(map[rate]).classList.add('active');
+    }
+
+    document.getElementById('btn-play').onclick = function() {
+        log('CMD: video.play()', 'ok');
+        video.play().catch(function(e) { log('play() rejected: ' + e.message, 'error'); });
+    };
+    document.getElementById('btn-pause').onclick = function() {
+        log('CMD: video.pause()', 'ok');
+        video.pause();
+    };
+    document.getElementById('btn-seek-back').onclick = function() {
+        var t = Math.max(0, video.currentTime - 10);
+        log('CMD: seek to ' + t.toFixed(1), 'ok');
+        video.currentTime = t;
+    };
+    document.getElementById('btn-seek-fwd').onclick = function() {
+        var t = Math.min(video.duration || 0, video.currentTime + 10);
+        log('CMD: seek to ' + t.toFixed(1), 'ok');
+        video.currentTime = t;
+    };
+    [0.5, 1, 1.5, 2].forEach(function(rate) {
+        var id = 'btn-rate-' + String(rate).replace('.', '').replace('0', '0');
+        var map = {0.5: 'btn-rate-05', 1: 'btn-rate-1', 1.5: 'btn-rate-15', 2: 'btn-rate-2'};
+        document.getElementById(map[rate]).onclick = function() {
+            log('CMD: playbackRate = ' + rate, 'ok');
+            video.playbackRate = rate;
+            highlightRateBtn(rate);
+        };
+    });
+    document.getElementById('btn-mute').onclick = function() {
+        log('CMD: muted = true', 'ok');
+        video.muted = true;
+    };
+    document.getElementById('btn-unmute').onclick = function() {
+        log('CMD: muted = false', 'ok');
+        video.muted = false;
+    };
+
+    // Seek bar interaction
+    seekBar.addEventListener('input', function() { isSeeking = true; });
+    seekBar.addEventListener('change', function() {
+        if (isFinite(video.duration)) {
+            var t = (seekBar.value / 100) * video.duration;
+            log('CMD: seek bar -> ' + t.toFixed(1), 'ok');
+            video.currentTime = t;
+        }
+        isSeeking = false;
+    });
+
+    // Listen for seek events from the video element
+    video.addEventListener('seeking', function() {
+        log('EVENT: seeking (currentTime=' + video.currentTime.toFixed(1) + ')');
+    });
+    video.addEventListener('seeked', function() {
+        log('EVENT: seeked (currentTime=' + video.currentTime.toFixed(1) + ')', 'ok');
+    });
+    video.addEventListener('ratechange', function() {
+        log('EVENT: ratechange (playbackRate=' + video.playbackRate + ')', 'ok');
+    });
+    video.addEventListener('volumechange', function() {
+        log('EVENT: volumechange (muted=' + video.muted + ' volume=' + video.volume.toFixed(2) + ')');
+    });
+    video.addEventListener('ended', function() {
+        log('EVENT: ended', 'warn');
+    });
+    video.addEventListener('pause', function() {
+        log('EVENT: pause');
+    });
+    video.addEventListener('play', function() {
+        log('EVENT: play', 'ok');
+    });
+
+    // Update timeline and buffered info every 250ms
+    setInterval(function() {
+        if (video.readyState >= 1) {
+            // Update seek bar
+            if (!isSeeking && isFinite(video.duration) && video.duration > 0) {
+                seekBar.value = (video.currentTime / video.duration) * 100;
+            }
+            timeDisplay.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(video.duration);
+
+            // Update buffered ranges
+            var ranges = [];
+            for (var i = 0; i < video.buffered.length; i++) {
+                ranges.push(fmtTime(video.buffered.start(i)) + '-' + fmtTime(video.buffered.end(i)));
+            }
+            bufferedInfo.textContent = 'Buffered: ' + (ranges.length > 0 ? ranges.join(', ') : 'none') +
+                ' | readyState=' + video.readyState + ' networkState=' + video.networkState;
+        }
+    }, 250);
+
+    // Periodic status log (less frequent)
+    setInterval(function() {
+        if (video.readyState >= 1) {
+            log('Status: time=' + video.currentTime.toFixed(1) +
+                ' duration=' + (isFinite(video.duration) ? video.duration.toFixed(1) : 'N/A') +
+                ' paused=' + video.paused +
+                ' rate=' + video.playbackRate +
+                ' readyState=' + video.readyState +
+                ' networkState=' + video.networkState +
+                ' buffered.length=' + video.buffered.length);
+        }
+    }, 5000);
+
+    // Focus the Play button on load for tvOS remote navigation
+    document.getElementById('btn-play').focus();
+    log('Focus set to Play button for tvOS remote navigation', 'ok');
+    })();
+    </script>
+</body>
+</html>
+
+

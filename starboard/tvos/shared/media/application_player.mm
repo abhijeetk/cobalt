@@ -407,11 +407,15 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
         } else {
           [self updatePlayerState:kSbPlayerStatePresenting];
         }
-        // Start playback once ready.
-        if (!self->_playerShouldPause) {
-          NSLog(@"[AVPlayer] ReadyToPlay — calling [player play]");
-          [self->_player play];
-        }
+        // Do NOT call [player play] here. In C25, playback was controlled
+        // exclusively via SetPlaybackRate() from the pipeline. Calling
+        // [player play] directly bypasses Chromium's pipeline, creating a
+        // rate mismatch where the native AVPlayer is playing but Chromium
+        // thinks rate=0 (paused). The pipeline will call SetPlaybackRate(1.0)
+        // when Play() is invoked from JavaScript or autoplay.
+        NSLog(@"[AVPlayer] ReadyToPlay — NOT calling [player play], "
+              @"waiting for SetPlaybackRate from pipeline");
+        (void)self->_playerShouldPause;  // suppress unused warning
       });
       return;
     }
@@ -543,10 +547,14 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)setPlaybackRate:(double)playbackRate {
-  if (_player.rate == playbackRate) {
-    return;
-  }
+  SB_LOG(INFO) << "[Phase3-Play-Pause] ApplicationPlayer setPlaybackRate: "
+               << playbackRate << ", current AVPlayer.rate=" << _player.rate;
+  // Always set rate on AVPlayer even if it appears unchanged.
+  // The native AVPlayer may have called [play] independently (e.g. on
+  // ReadyToPlay), making its actual rate differ from what Chromium expects.
   _player.rate = playbackRate;
+  SB_LOG(INFO) << "[Phase3-Play-Pause] AVPlayer.rate now set to "
+               << playbackRate;
 }
 
 - (NSInteger)totalDroppedFrames {

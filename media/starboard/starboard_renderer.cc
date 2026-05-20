@@ -414,17 +414,23 @@ void StarboardRenderer::SetPlaybackRate(double playback_rate) {
     return;
   }
 
-  LOG(INFO) << "StarboardRenderer changes playback rate from " << playback_rate_
-            << " to " << playback_rate << '.';
-
-  if (playback_rate_ == playback_rate) {
-    return;
-  }
+  LOG(INFO) << "[Phase3-Play-Pause] StarboardRenderer::SetPlaybackRate("
+            << playback_rate << "), current=" << playback_rate_
+            << ", player_bridge_=" << (player_bridge_ ? "yes" : "null");
 
   playback_rate_ = playback_rate;
 
   if (player_bridge_) {
+    // Always forward rate to native player even if our cached value matches.
+    // The native AVPlayer may have a different rate (e.g. it called [play]
+    // independently when ReadyToPlay), so we must always push the authoritative
+    // rate from Chromium's pipeline.
+    LOG(INFO) << "[Phase3-Play-Pause] Forwarding rate " << playback_rate_
+              << " to SbPlayerBridge";
     player_bridge_->SetPlaybackRate(playback_rate_);
+  } else {
+    LOG(WARNING) << "[Phase3-Play-Pause] player_bridge_ is null, "
+                 << "cannot set rate";
   }
 }
 

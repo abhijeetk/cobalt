@@ -1025,6 +1025,8 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
 void WebMediaPlayerImpl::Play() {
   DVLOG(1) << __func__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
+  LOG(INFO) << "[Phase3-Play-Pause] WebMediaPlayerImpl::Play() called, "
+            << "playback_rate_=" << playback_rate_;
 
   // User initiated play unlocks background video playback.
   if (frame_->HasTransientUserActivation())
@@ -1072,6 +1074,8 @@ void WebMediaPlayerImpl::Play() {
 void WebMediaPlayerImpl::Pause(PauseReason pause_reason) {
   DVLOG(1) << __func__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
+  LOG(INFO) << "[Phase3-Play-Pause] WebMediaPlayerImpl::Pause() called, "
+            << "setting rate to 0.0";
 
   // We update the paused state even when casting, since we expect pause() to be
   // called when casting begins, and when we exit casting we should end up in a

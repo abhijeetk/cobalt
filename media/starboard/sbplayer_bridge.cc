@@ -395,16 +395,24 @@ void SbPlayerBridge::SetVolume(float volume) {
 void SbPlayerBridge::SetPlaybackRate(double playback_rate) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
+  LOG(INFO) << "[Phase3-Play-Pause] SbPlayerBridge::SetPlaybackRate("
+            << playback_rate << "), state_=" << state_
+            << ", seek_pending_=" << seek_pending_
+            << ", player_=" << (player_ ? "valid" : "null");
   playback_rate_ = playback_rate;
 
   if (state_ == kSuspended) {
+    LOG(WARNING) << "[Phase3-Play-Pause] Skipping: player is suspended";
     return;
   }
 
   if (seek_pending_) {
+    LOG(WARNING) << "[Phase3-Play-Pause] Skipping: seek is pending";
     return;
   }
 
+  LOG(INFO) << "[Phase3-Play-Pause] Calling SbPlayerSetPlaybackRate("
+            << playback_rate << ")";
   sbplayer_interface_->SetPlaybackRate(player_, playback_rate);
 }
 

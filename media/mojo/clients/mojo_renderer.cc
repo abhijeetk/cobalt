@@ -172,6 +172,8 @@ void MojoRenderer::SetPlaybackRate(double playback_rate) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(remote_renderer_.is_bound());
 
+  LOG(INFO) << "[Phase3-Play-Pause] MojoRenderer::SetPlaybackRate("
+            << playback_rate << ") -> sending over Mojo IPC";
   remote_renderer_->SetPlaybackRate(playback_rate);
 
   {

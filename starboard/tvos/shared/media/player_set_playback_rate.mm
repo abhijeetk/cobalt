@@ -32,6 +32,9 @@ bool SbPlayerSetPlaybackRate(SbPlayer player, double playback_rate) {
     SBDPlayerManager* playerManager = SBDGetApplication().playerManager;
     if ([playerManager isUrlPlayer:player]) {
       // Url player process
+      SB_LOG(INFO)
+          << "[Phase3-Play-Pause] SbPlayerSetPlaybackRate: URL player, "
+          << "rate=" << playback_rate;
       SBDApplicationPlayer* applicationPlayer =
           [playerManager applicationPlayerForStarboardPlayer:player];
       applicationPlayer.playbackRate = playback_rate;

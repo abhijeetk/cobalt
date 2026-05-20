@@ -155,6 +155,8 @@ void StarboardRendererWrapper::StartPlayingFrom(base::TimeDelta time) {
 
 void StarboardRendererWrapper::SetPlaybackRate(double playback_rate) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  LOG(INFO) << "[Phase3-Play-Pause] StarboardRendererWrapper::"
+            << "SetPlaybackRate(" << playback_rate << ") [GPU process]";
   GetRenderer()->SetPlaybackRate(playback_rate);
 }
 

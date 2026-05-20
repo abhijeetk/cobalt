@@ -38,6 +38,7 @@ enum class DemuxerType {
   kFrameInjectingDemuxer = 5,
   kStreamProviderDemuxer = 6,
   kManifestDemuxer = 7,
+  kUrlPlayerDemuxer = 8,  // tvOS AVPlayer / URL-based native player
 };
 
 class MEDIA_EXPORT DemuxerHost {

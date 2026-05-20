@@ -37,3 +37,10 @@ Map native `AVPlayer` statuses to Chromium `ReadyState`:
 *   **Mojo Latency:** Minimizing lag between GPU-reported time and Renderer-side queries.
 *   **End-of-Stream (EOS):** Mapping `AVPlayerItemDidPlayToEndTimeNotification` to Chromium's `OnEnded()`.
 *   **Error Mapping:** Translating native CoreMedia errors (e.g., `-19152`) to Chromium `PipelineStatus`.
+
+## 5. Completed Tasks
+
+| Task | Commit | Description |
+|------|--------|-------------|
+| Play/Pause Pipeline Fix | `1ec791ec58714` | Fixed rate mismatch between native AVPlayer and Chromium pipeline. Removed direct `[player play]` from ReadyToPlay handler (was bypassing pipeline, added during Chrobalt port, not present in C25). Removed rate-unchanged early-out guards in StarboardRenderer and ApplicationPlayer so SetPlaybackRate always reaches AVPlayer. Added `[Phase3-Play-Pause]` trace logging across all 8 pipeline layers (WebMediaPlayerImpl, PipelineImpl, MojoRenderer, StarboardRendererWrapper, StarboardRenderer, SbPlayerBridge, SbPlayerSetPlaybackRate, ApplicationPlayer). Added playback control test page with tvOS remote navigation (play, pause, seek, rate, mute buttons with tabindex focus management). |
+| Autoplay Fix + kUrlPlayerDemuxer | `pending` | Added `kUrlPlayerDemuxer` to DemuxerType enum (value 8) replacing `kUnknownDemuxer` for URL players. Fixed autoplay by returning true from `CanPlayThrough()` for URL player demuxer, allowing readyState to reach `kHaveEnoughData` (4) which triggers `RequestAutoplayByAttribute()`. Root cause: DoLoad bypass skips DataSource creation for HLS URLs, so `buffered_data_source_host_->CanPlayThrough()` returned false, capping readyState at 3. Updated mojom, traits, histograms. |

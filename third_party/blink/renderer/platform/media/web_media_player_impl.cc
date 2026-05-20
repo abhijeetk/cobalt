@@ -2302,6 +2302,14 @@ bool WebMediaPlayerImpl::CanPlayThrough() {
     return true;
   if (GetDemuxerType() == media::DemuxerType::kChunkDemuxer)
     return true;
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  // URL players (AVPlayer/HLS) manage their own buffering natively.
+  // CanPlayThrough must return true so readyState reaches kHaveEnoughData,
+  // which is required for autoplay to trigger via RequestAutoplayByAttribute.
+  if (GetDemuxerType() == media::DemuxerType::kUrlPlayerDemuxer) {
+    return true;
+  }
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
   if (demuxer_manager_->DataSourceFullyBuffered()) {
     return true;
   }

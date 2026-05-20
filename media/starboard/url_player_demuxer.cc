@@ -90,8 +90,7 @@ std::string UrlPlayerDemuxer::GetDisplayName() const {
 }
 
 DemuxerType UrlPlayerDemuxer::GetDemuxerType() const {
-  // Use kUnknownDemuxer since there's no dedicated type for URL player.
-  return DemuxerType::kUnknownDemuxer;
+  return DemuxerType::kUrlPlayerDemuxer;
 }
 
 void UrlPlayerDemuxer::Initialize(DemuxerHost* host,

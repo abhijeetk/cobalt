@@ -3032,6 +3032,10 @@ std::unique_ptr<media::Renderer> WebMediaPlayerImpl::CreateRenderer(
   }
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
+  LOG(INFO) << "[StarboardUrlRenderer] CreateRenderer:"
+            << " renderer_type=" << GetRendererName(renderer_type_)
+            << " loaded_url=" << demuxer_manager_->LoadedUrl().spec()
+            << " (URL is known here — this is where factory-level split would happen)";
   auto renderer =
       renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
           media_task_runner_, worker_task_runner_, audio_source_provider_.get(),

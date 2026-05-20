@@ -165,42 +165,74 @@ sequenceDiagram
 | `StarboardUrlRenderer` (future) | GPU | `media/starboard/` | URL-based player — delegates entirely to AVPlayer via `SbUrlPlayerCreate` |
 | `SbPlayerBridge` | GPU | `media/starboard/` | Starboard abstraction — wraps `SbPlayerCreate` / `SbUrlPlayerCreate` |
 
-## Why a Separate `StarboardUrlRenderer`
+## Renderer Architecture Decision
 
-`StarboardRenderer` is designed for the HTML5 demuxed player — it manages DemuxerStreams,
-decoder configs, CDM/DRM key exchange, audio/video buffer writing, write duration tracking,
-and codec-level details. The URL player (AVPlayer) needs **none of this** because AVPlayer
-handles demuxing, decoding, buffering, and rendering internally.
+### Current approach: `#if` guards inside `StarboardRenderer`
 
-### What `StarboardRenderer` Does That URL Player Doesn't Need
+URL player logic lives inside `StarboardRenderer` with `#if SB_HAS(PLAYER_WITH_URL)` guards
+(~10 blocks). This was chosen because:
 
-| Feature | StarboardRenderer | URL Player (AVPlayer) |
+1. **Timing constraint:** `StarboardRendererWrapper` constructs `StarboardRenderer` as a direct
+   member in its initializer list (`starboard_renderer_wrapper.cc:48`). The URL arrives via
+   `SetSourceUrl` Mojo message ~3ms later (verified in device logs). By then it's too late to
+   swap the renderer type.
+
+2. **CDM/DRM sharing:** `SetCdm` (`starboard_renderer.cc:298-325`) handles both normal and URL
+   player paths. For encrypted HLS (FairPlay), the URL player still needs `SetCdm` to call
+   `player_bridge_->SetDrmSystem()` which connects `AVContentKeySession` and drains pending
+   key requests. A separate renderer would need to duplicate or share this logic.
+
+3. **Wrapper coupling:** The wrapper's lifecycle (callbacks, Mojo receivers, GPU factory, decode
+   target setup) is wired around the concrete `StarboardRenderer` member. Retrofitting a second
+   renderer type requires significant refactoring of the wrapper itself.
+
+### What the URL player does NOT need from `StarboardRenderer`
+
+| Feature | Why not needed |
+|---|---|
+| DemuxerStream reading / `OnNeedData` buffer writing | AVPlayer fetches HLS segments itself |
+| Decoder config extraction (codec, sample rate) | AVPlayer detects codecs from manifest |
+| Bitstream converter (AAC/H264 ADTS/Annex B) | AVPlayer handles raw HLS segments |
+| Audio write duration tracking | AVPlayer manages audio buffering |
+| EOS buffer handling | AVPlayer detects end internally |
+| Config change handling | AVPlayer handles adaptive bitrate internally |
+
+### What the URL player DOES need (shared with `StarboardRenderer`)
+
+| Feature | Why needed |
+|---|---|
+| `SetCdm` / DRM attachment | FairPlay requires `player_bridge_->SetDrmSystem()` |
+| `OnEncryptedMediaInitDataEncountered` | FairPlay init data must reach JS |
+| `SbPlayerBridge` lifecycle | Player creation, seek, playback rate, volume |
+| `OnPlayerStatus` callbacks | State transitions, duration, video size reporting |
+| `SbWindow` handling | Needed for punch-out video rendering |
+
+### Future: Factory-level split (the architecturally right solution)
+
+The correct long-term solution is to switch renderer type at the **factory level**, before
+anything is constructed:
+
+```
+WebMediaPlayerImpl::DoLoad()
+  knows URL is .m3u8 (from UrlPlayerDemuxer)
+    -> RendererFactorySelector picks kStarboardUrlPlayer
+      -> StarboardUrlRendererClientFactory creates entire URL player stack
+        -> StarboardUrlRendererWrapper owns StarboardUrlRenderer
+          -> SbUrlPlayerCreate(url)
+```
+
+No timing problem because the URL is known at `DoLoad()` time, before `CreateRendererInternal`
+runs. This requires 4 new classes:
+
+| Class | Location | Purpose |
 |---|---|---|
-| DemuxerStream reading | Reads audio/video buffers from demuxer streams | Not needed — AVPlayer fetches HLS segments itself |
-| Decoder config (codec, sample rate, etc.) | Extracts from streams, passes to `SbPlayerCreate` | Not needed — AVPlayer detects codecs from manifest |
-| CDM / DRM key exchange | Manages `CdmContext`, `SbDrmSystem`, waits for keys | Not needed — FairPlay is handled natively by AVPlayer + Starboard platform layer |
-| Buffer writing (`OnNeedData` → `WriteBuffer`) | Core loop: reads from demuxer, writes to SbPlayer | Not needed — AVPlayer manages its own buffer pipeline |
-| Audio write duration tracking | Tracks local/remote audio output for preroll | Not needed — AVPlayer manages audio buffering |
-| EOS (end-of-stream) handling | Sends EOS buffers per stream | Not needed — AVPlayer detects end internally |
-| Bitstream converter (AAC/H264) | Converts to ADTS/Annex B format | Not needed — AVPlayer handles raw HLS segments |
-| Config change handling | Responds to `DemuxerStream::kConfigChanged` | Not needed — AVPlayer handles adaptive bitrate internally |
+| `StarboardUrlRendererClientFactory` | `media/mojo/clients/starboard/` | Creates renderer-side URL player client |
+| `StarboardUrlRendererClient` | `media/mojo/clients/starboard/` | Renderer-side proxy (URL passed at creation, not via Mojo) |
+| `StarboardUrlRendererWrapper` | `media/mojo/services/starboard/` | GPU-side Mojo receiver, owns `StarboardUrlRenderer` |
+| `StarboardUrlRenderer` | `media/starboard/` | GPU-side player logic with CDM support (~400-500 lines) |
 
-### What `StarboardUrlRenderer` Actually Needs
-
-A much simpler class:
-
-1. **Player creation** — `SbUrlPlayerCreate(url, window)` with encrypted media callback
-2. **Player status handling** — `OnPlayerStatus` for state transitions (Presenting, EndOfStream, Error)
-3. **Duration reporting** — query `SbPlayerBridge::GetDuration()` at Presenting, send via Mojo
-4. **Video size reporting** — query `GetVideoResolution()` at Presenting, send via `OnVideoNaturalSizeChange`
-5. **Time update polling** — periodic `GetCurrentMediaTime()` → `OnTimeUpdate` via Mojo
-6. **Seek** — `SbPlayerBridge::Seek(time)`
-7. **Playback rate / volume** — forward to `SbPlayerBridge`
-8. **Encrypted media callback** — forward init data to renderer process via Mojo
-
-This is roughly **~200 lines** vs StarboardRenderer's **~1400 lines**. Mixing both paths
-in one class with `#if SB_HAS(PLAYER_WITH_URL)` guards makes the code fragile and hard to
-reason about — every method needs "if URL player, skip this" logic.
+This is deferred until the full EME/DRM flow is proven stable. The `#if` guards are manageable
+for now and naturally share CDM/DRM logic without duplication.
 
 ## Mojo Signals: GPU → Renderer (What JS Needs)
 

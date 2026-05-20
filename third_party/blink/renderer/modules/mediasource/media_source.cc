@@ -603,6 +603,8 @@ bool MediaSource::IsTypeSupportedInternal(ExecutionContext* context,
   // Interupt Chromium's IsTypeSupported() from here for better performance.
   SbMediaSupportType support_type =
       SbMediaCanPlayMimeAndKeySystem(type.Ascii().c_str(), "");
+  LOG(INFO) << "[ABHIJEET][DRM] MediaSource::IsTypeSupportedInternal (Starboard path): type="
+            << type << " result=" << (support_type != kSbMediaSupportTypeNotSupported);
   return support_type != kSbMediaSupportTypeNotSupported;
 #else
   // 2. If type does not contain a valid MIME type string, then return false.

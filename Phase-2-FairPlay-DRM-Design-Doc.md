@@ -6,7 +6,9 @@
 # **One-page overview**
 
 ### **Summary**
-This document proposes adding FairPlay DRM support to Chrobalt's URL Player (Phase 1) so that protected HLS content can play on tvOS. The core challenge is that `AVPlayer` discovers encrypted content on the GPU thread, but the JavaScript EME logic that handles license exchange lives on the Renderer thread. We need to bridge this gap.
+This document proposes a strategy to integrate Apple's FairPlay Streaming (FPS) DRM into Chrobalt's multi-process architecture. Building on the Phase 1 "URL Player," this work enables playback of protected HLS content by bridging the DRM conversation between the native platform and Chromium’s media stack.
+
+While Phase 1 solved the process boundary problem for *routing* the HLS URL, Phase 2 addresses the more complex challenge of synchronizing the DRM handshake. We must ensure that encrypted media events discovered by the native `AVPlayer` (running on the GPU thread) can successfully trigger the standard web-based DRM logic (running on the Renderer thread) and that the resulting license can be safely delivered back to the hardware.
 
 ### **Platforms**
 tvOS
@@ -15,172 +17,128 @@ tvOS
 Cobalt Media Team
 
 ### **Bug**
-[b/512045535](https://partnerissuetracker.corp.google.com/u/1/issues/512045535)
+[b/512045535](https://partnerissuetracker.corp.google.com/u/1/issues/512045535) (Reference)
 
 ### **Code affected**
-`media/base`, `media/starboard`, `media/filters`, `media/mojo`, `starboard/tvos/shared/media`, `third_party/blink/renderer/platform/media`, `components/cdm/renderer`
+`media/base`, `media/starboard`, `media/filters`, `media/mojo`, `starboard/tvos/shared/media`, `third_party/blink/renderer/platform/media`
 
 ---
 
 # **Design**
 
-## **The Big Picture**
+## **Problem Statement**
+On tvOS, `AVPlayer` lives in the GPU thread, while the web page and its EME logic (JavaScript) live in the Renderer thread. For encrypted HLS, these two sides must perform a bidirectional conversation across a process boundary.
 
-In Phase 1, communication was one-way: the Renderer sends a URL to the GPU, and `AVPlayer` plays it. For encrypted content, we need two-way communication:
+In the old Cobalt (C25) architecture, this was simple because everything happened on a single thread using direct function calls. In Chrobalt, we must bridge this gap using Mojo IPC. Every message must land on the correct thread and use a data format that both Chromium's EME stack and Apple's native frameworks understand.
 
-```mermaid
-graph LR
-    subgraph "Renderer Thread"
-        JS["JavaScript (EME)"]
-        SRC["StarboardRendererClient"]
-    end
-    subgraph "GPU Thread"
-        SR["StarboardRenderer"]
-        AVP["AVPlayer"]
-    end
-
-    AVP -->|"1 - I found encrypted content"| SR
-    SR -->|"2 - Mojo"| SRC
-    SRC -->|"3"| JS
-
-    JS -->|"4 - Here is the license"| SRC
-    SRC -->|"5 - Mojo"| SR
-    SR -->|"6"| AVP
-```
-
-Steps 1-3: AVPlayer tells JavaScript about encryption (GPU to Renderer).
-Steps 4-6: JavaScript provides the license back (Renderer to GPU).
-
-The [W3C EME specification](https://www.w3.org/TR/encrypted-media-2/) defines the standard API for this conversation. The diagram below shows the standard EME stack. In our case, the **Media Stack** (bottom-left) is split across two threads, which is the root of every challenge in this document.
-
-![W3C EME Stack Overview](https://www.w3.org/TR/encrypted-media-2/stack_overview.svg)
-
-## **Why C25's Approach Does Not Work Here**
-
-C25 was single-process. `AVPlayer` and JavaScript lived on the same thread, so the DRM handshake was a chain of direct function calls. C25 also made YouTube-specific choices:
-
-*   Used a custom init data type `"fairplay"` instead of the standard `"skd"` or `"sinf"` types.
-*   Did not support `setServerCertificate()`. Instead, the certificate was packed into `generateRequest()` init data.
-*   Decoded identifiers as UTF-16LE and expected license responses in Base64.
-
-These choices worked for YouTube's JS app but are incompatible with standard FairPlay web content. Since we do not have YouTube's app-side JS code for testing, we need to support the standard path (used by Safari and third-party providers like Axinom) while keeping backward compatibility with the C25 path for production.
-
-## **Proposed Solution**
-
-We propose four changes, each addressing a specific gap. For each, we describe what currently breaks and how we would fix it.
-
-### **1. Route encrypted events from GPU to Renderer**
-
-**What breaks:** AVPlayer discovers encryption and fires a callback, but the signal stops at `StarboardRenderer` (GPU thread). There is no path to reach JavaScript.
-
-**What we propose:** Add a new Mojo method `OnEncryptedMediaInitDataEncountered` on `StarboardRendererClientExtension`. On the Renderer side, we wire this into the existing `DemuxerManager::OnEncryptedMediaInitData` entry point using a callback set during renderer creation. This reuses the same code path that Chromium's built-in demuxers already use, so the event reaches JavaScript through the standard `'encrypted'` event on the `<video>` element.
+### **Process Boundary Diagram**
 
 ```
-AVPlayer (GPU) -> SbPlayerBridge -> StarboardRenderer
-    -> StarboardRendererWrapper -> Mojo
-    -> StarboardRendererClient -> DemuxerManager
-    -> WebMediaPlayerImpl -> JS 'encrypted' event
+      Renderer Thread (Web Page)                 GPU Thread (Native Player)
+      =========================                  ==========================
+
+  +-----------------------+             +------------------------+
+  | WebMediaPlayerImpl    |             | StarboardRenderer      |
+  |   (Fires 'encrypted') |  <--Mojo--  |   (Receives Events)    |
+  +-----------------------+             |                        |
+  | StarboardRendererClient|            | SbPlayerBridge         |
+  |   (Bridges Events)    | --Mojo-->  |   (Native Wrappers)    |
+  +-----------------------+             +------------------------+
+  | StarboardCdm          |             | SBDApplicationPlayer   |
+  |   (Bridges License)   | --Mojo-->  |   (AVContentKeySession)|
+  +-----------------------+             +------------------------+
+  | JavaScript (EME)      |             | AVPlayer               |
+  |   session.update()    |             |   (Hardware Decrypt)   |
+  +-----------------------+             +------------------------+
 ```
 
-### **2. Add FairPlay init data types to Chromium's enum**
+## **FairPlay Integration Strategy**
 
-**What breaks:** Chromium's `EmeInitDataType` enum only has `CENC`, `WEBM`, and `KEYIDS`. FairPlay types (`"skd"`, `"sinf"`, `"fairplay"`) all map to `UNKNOWN`, which triggers a `DCHECK` crash in `WebMediaPlayerImpl`.
+### **Background: The C25 Legacy**
+C25's FairPlay implementation was highly specialized for YouTube. It made several assumptions that are incompatible with Chrobalt:
+*   **Synchronous Flow:** It relied on direct function calls. In Chrobalt, native player events fire from background system queues and must be asynchronously posted across threads.
+*   **Custom Formats:** It used a proprietary "packed" format for initialization data. Standard web content uses raw URI strings (`skd://`).
+*   **Implicit Certificates:** It bypassed `setServerCertificate()`, assuming the certificate would always be bundled inside the license request itself.
 
-**What we propose:** Add `SKD`, `SINF`, and `FAIRPLAY` to the enum in `media/base/eme_constants.h` and update the string-to-enum mapping in `encrypted_media_utils.cc`. `SKD` is the standard FairPlay type (raw `skd://` URI). `SINF` is the standard MP4 sinf atom format. `FAIRPLAY` is C25's custom YouTube type. All `switch` statements on the enum across the codebase would need updates.
+### **Why Chrobalt needs a different approach**
+To support standard FairPlay (e.g., Axinom, Safari-compatible web apps), we must align with W3C EME standards while maintaining backward compatibility for legacy YouTube content. This requires the system to handle raw URIs, explicit certificates, and binary license formats that the legacy code was not designed for.
 
-### **3. Support both standard and C25 data formats**
+### **Capability Interception (IsTypeSupported)**
+Before playback begins, a web app calls `navigator.requestMediaKeySystemAccess()` to check if the browser supports FairPlay. Our investigation identified a critical roadblock in this initial check:
 
-**What breaks:** Three format mismatches cause silent failures:
+*   **Encryption Scheme Default:** Chromium's configuration selector defaults to `kCenc` (Common Encryption) if the application doesn't specify a scheme. However, FairPlay **only** supports `kCbcs` (Sample-AES). This causes the browser to silently reject FairPlay because it thinks the platform cannot handle the requested (default) encryption scheme.
+*   **Starboard Routing:** During this check, the browser probes the platform via `SbMediaCanPlayMimeAndKeySystem`. On tvOS, this logic must correctly identify when a query is for HLS content (e.g., using `application/x-mpegURL`) and ensure it returns a positive result for FairPlay-supported codecs like H.264 and AAC.
 
-| Issue | C25 expects | Standard provides | Result |
-| :--- | :--- | :--- | :--- |
-| Init data format | Packed 3-field blob | Raw `skd://` URI | `unpackData()` returns nil, callback never fires |
-| Identifier encoding | UTF-16LE | UTF-8 | Garbled string, no match to pending key request |
-| License response | Base64 string | Raw binary | Decode fails, key not applied |
+We propose updating these capability checks to be "FairPlay-aware," ensuring that the browser correctly identifies the platform's native DRM capabilities.
 
-**What we propose:** Branch on the init data type string in the Starboard DRM layer. If the type is `"skd"`, treat data as raw UTF-8 and use a stored certificate. If the type is `"fairplay"`, use the existing C25 unpacking logic. For license responses, try raw binary first, fall back to Base64.
+## **Investigation Findings**
+Our research identified four critical technical gaps that would prevent a standard DRM handshake:
 
-### **4. Support certificate storage and late DRM attachment**
+1.  **Orphaned Encrypted Events:** Chromium expects encryption to be discovered by a "Demuxer" in the Renderer. Since our native player replaces the Demuxer but lives in the GPU, encrypted events are trapped in the GPU thread with no path back to the web page.
+2.  **Enum Incompatibility:** Chromium's `EmeInitDataType` does not recognize `SKD` or `SINF`. These events are dropped as "unknown," causing a crash in the media pipeline.
+3.  **Encoding & Format Mismatches:**
+    *   **Identifier Encoding:** Standard FairPlay uses UTF-8 for URIs. Legacy code expects UTF-16LE. This mismatch causes "key not found" errors in the hardware.
+    *   **Unpacking Failure:** The platform layer unconditionally tries to "unpack" data. A raw standard URI is too short for this logic, causing the license request to fail silently and time out after 20 seconds.
+4.  **Startup Races:** In a multi-threaded browser, the video might start loading before the DRM system is ready. If the system doesn't handle this "race" by queuing requests, the player will time out and fail to play.
 
-**What breaks:** Two issues related to timing:
+## **Proposed Architecture**
 
-*   `setServerCertificate()` is rejected because C25 returned `false` from `SbDrmIsServerCertificateUpdatable`. C25's YouTube app packed the certificate into `generateRequest()` instead. Chromium/Widevine and Safari/FairPlay both support `setServerCertificate()`. The [W3C EME spec](https://www.w3.org/TR/encrypted-media-2/#dom-mediakeys-setservercertificate) allows either approach, but standard FairPlay web apps (the only ones we can test with) require it.
+### **1. Universal Type Support [proposed modification]**
+We propose extending Chromium's core media enums to include `SINF` and `SKD`. This ensures that FairPlay-specific events are recognized throughout the entire IPC pipeline.
 
-*   AVPlayer discovers encryption before JS has finished setting up the CDM. Key requests are queued in `_pendingKeyRequests` but never drained because `SetCdm` does not call `player_bridge_->SetDrmSystem()`.
+### **2. The Event Routing Bridge [proposed, new]**
+To bridge the thread gap without hacking Chromium's core interfaces, we propose using the existing `DemuxerManager` as an entry point. When our custom Renderer is created, we will wire its event output directly into the `DemuxerManager`. This "injects" the platform-specific event into the standard Chromium flow, reaching JavaScript safely.
 
-**What we propose:** Return `true` from `SbDrmIsServerCertificateUpdatable` and store the certificate in `SBDApplicationDrmSystem`. In `StarboardRenderer::SetCdm`, always forward the DRM system to the player bridge so pending key requests are drained regardless of when the CDM arrives.
+### **3. Adaptive DRM Payloads [proposed modification]**
+The platform's DRM layer must become "format-aware":
+*   **Modern Path:** If it detects standard HLS, it will treat identifiers as raw UTF-8 and use a stored certificate.
+*   **Legacy Path:** It will retain the ability to read YouTube's custom blobs for backward compatibility.
+*   **Resilient Licenses:** The system will attempt raw binary updates (standard) before falling back to decoding.
 
-## **End-to-End Flow**
+### **4. State-Resilient Handshaking [proposed modification]**
+We propose a "late-binding" strategy where the DRM system can be attached to the player at any time. If the player finds encrypted content before the DRM is ready, it will safely queue the request and process it automatically once the connection is made.
+
+## **Sequence Diagram: The Handshake**
 
 ```mermaid
 sequenceDiagram
-    participant AVP as AVPlayer<br/>(GPU Thread)
-    participant SR as StarboardRenderer<br/>(GPU Thread)
-    participant DRM as SBDApplicationDrmSystem<br/>(GPU Thread)
-    participant SRC as StarboardRendererClient<br/>(Renderer Thread)
-    participant CDM as StarboardCdm<br/>(Renderer Thread)
-    participant JS as JavaScript EME<br/>(Renderer Thread)
+    box Renderer Thread (Web Page)
+        participant JS as JavaScript
+        participant DM as DemuxerManager
+        participant SRC as StarboardRendererClient
+    end
+    box GPU Thread (Native Player)
+        participant SR as StarboardRenderer
+        participant AVP as AVPlayer
+    end
 
-    Note over AVP,JS: 1. Discovery
-    AVP->>SR: Encrypted content found (skd://)
+    Note over JS,AVP: 1. Setup & Discovery
+    AVP->>SR: Encrypted Content Found (skd://)
     SR->>SRC: Mojo: OnEncryptedMediaInitDataEncountered
-    SRC->>JS: 'encrypted' event
+    SRC->>DM: Forward to DemuxerManager
+    DM->>JS: Fire 'encrypted' event
 
-    Note over AVP,JS: 2. Setup
-    JS->>CDM: createMediaKeys, setServerCertificate
-    CDM->>DRM: Store certificate
-    JS->>SRC: video.setMediaKeys
-    SRC->>SR: Mojo: SetCdm
-    SR->>AVP: SetDrmSystem (drains pending keys)
+    Note over JS,AVP: 2. License Request
+    JS->>SRC: generateRequest("skd")
+    SRC->>SR: Mojo: Generate SPC
+    SR->>AVP: Create SPC using stored certificate
+    AVP-->>JS: SPC sent back as 'message' event
 
-    Note over AVP,JS: 3. License Exchange
-    JS->>CDM: session.generateRequest("skd", uri)
-    CDM->>DRM: Generate SPC using stored certificate
-    DRM->>AVP: makeStreamingContentKeyRequestDataForApp
-    AVP-->>JS: SPC via session.onmessage
-    JS->>JS: fetch(licenseServer, SPC) returns CKC
-    JS->>CDM: session.update(CKC)
-    CDM->>DRM: Apply CKC
-    DRM->>AVP: processContentKeyResponse
-    Note over AVP: Decrypts and plays
+    Note over JS,AVP: 3. License Update & Playback
+    JS->>JS: Fetch License from Server
+    JS->>SRC: update(binary license)
+    SRC->>SR: Mojo: Apply License
+    SR->>AVP: Decrypt and Play
 ```
-
-## **Platform Guard Strategy**
-
-Same as Phase 1:
-
-| Where | Guard |
-| :--- | :--- |
-| Non-Starboard code | `BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)` |
-| Starboard code (`media/starboard/`) | `#if SB_HAS(PLAYER_WITH_URL)` |
-| Enum declarations (`eme_constants.h`) | Unconditional (consistent with existing types) |
-| Mojo definitions | Always present (cannot `EnableIf` for tvOS) |
 
 ---
 
 # **Testing plan**
 
-We propose validating with a [FairPlay test page](https://people.igalia.com/akandalkar/fairplay/fairplay-urlplayer-test.html) using an Axinom encrypted HLS stream.
+We will validate this design using a standard FairPlay test page.
 
-**Success criteria:**
-1. `encrypted` event fires in JS with init data type `"skd"`.
-2. `setServerCertificate()` resolves successfully.
-3. `generateRequest()` produces an SPC and fires `session.onmessage`.
-4. After `session.update(CKC)`, video plays.
-
-**Regression:** Non-encrypted HLS (Phase 1) must remain unaffected.
-
----
-
-# **References**
-
-| Topic | Link |
-| :--- | :--- |
-| W3C EME Specification | [encrypted-media-2](https://www.w3.org/TR/encrypted-media-2/) |
-| W3C `setServerCertificate` | [Section 4.3.1](https://www.w3.org/TR/encrypted-media-2/#dom-mediakeys-setservercertificate) |
-| W3C Init Data Format Registry | [eme-initdata-registry](https://www.w3.org/TR/eme-initdata-registry/) |
-| C25 `SbDrmIsServerCertificateUpdatable` | [github](https://github.com/youtube/cobalt/blob/main/starboard/tvos/shared/media/drm_is_server_certificate_updatable.mm) |
-| C25 `application_player.mm` | [github](https://github.com/youtube/cobalt/blob/main/starboard/tvos/shared/media/application_player.mm) |
-| WebKit FairPlay CDM | `CDMInstanceFairPlayStreamingAVFObjC.mm` (local: `/Users/abhijeet/code/WebKit/Source/WebCore/platform/graphics/avfoundation/objc/`) |
-| Phase 1 Design Doc | `Phase-1.md` |
-| Detailed Research | `ResearchReport.md`, `EME-C25-Flow.md`, `FairPlay-GenerateRequest-Gap-Analysis.md` |
+**Success Criteria:**
+- The `encrypted` event fires in JavaScript with a valid `skd://` URI.
+- The browser successfully generates a license request (SPC) using a certificate set earlier in the process.
+- The player accepts a raw binary license and begins playback.
+- Existing YouTube HLS content continues to play correctly using the legacy path.

@@ -75,6 +75,9 @@ bool IsVideoCodecSupportedByUrlPlayer(const std::string& codec) {
 
 SbMediaSupportType SbMediaCanPlayMimeAndKeySystem(const char* mime,
                                                   const char* key_system) {
+  NSLog(
+      @"[ABHIJEET][DRM] SbMediaCanPlayMimeAndKeySystem: mime=%s key_system=%s",
+      mime ? mime : "(null)", key_system ? key_system : "(null)");
   if (mime == NULL) {
     SB_DLOG(WARNING) << "mime cannot be NULL";
     return kSbMediaSupportTypeNotSupported;
@@ -110,8 +113,16 @@ SbMediaSupportType SbMediaCanPlayMimeAndKeySystem(const char* mime,
       return kSbMediaSupportTypeNotSupported;
     }
 
+    NSLog(@"[ABHIJEET][DRM] SbMediaCanPlayMimeAndKeySystem: HLS path -> "
+          @"kSbMediaSupportTypeProbably for mime=%s",
+          mime);
     return kSbMediaSupportTypeProbably;
   }
 
-  return starboard::CanPlayMimeAndKeySystem(mime, key_system);
+  SbMediaSupportType result =
+      starboard::CanPlayMimeAndKeySystem(mime, key_system);
+  NSLog(@"[ABHIJEET][DRM] SbMediaCanPlayMimeAndKeySystem: standard path -> %d "
+        @"for mime=%s",
+        result, mime);
+  return result;
 }

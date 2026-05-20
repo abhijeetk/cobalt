@@ -20,6 +20,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/decoder_buffer.h"
@@ -692,7 +693,9 @@ void StarboardRenderer::CreatePlayerBridge() {
     LOG(INFO) << "TESTING: Hardcoded HLS URL for AVPlayer flow test.";
   }
   if (!source_url_.empty()) {
-    LOG(INFO) << "Creating URL-based SbPlayerBridge for HLS playback.";
+    LOG(INFO) << "[ABHIJEET][DRM] Creating URL-based SbPlayerBridge for HLS "
+                 "playback pid="
+              << getpid() << " tid=" << base::PlatformThread::CurrentId();
     player_bridge_.reset(new SbPlayerBridge(
         GetSbPlayerInterface(), task_runner_, source_url_, sb_window_, this,
         /*allow_resume_after_suspend=*/false, kSbPlayerOutputModePunchOut,

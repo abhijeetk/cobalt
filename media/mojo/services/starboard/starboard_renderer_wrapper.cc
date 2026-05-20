@@ -19,6 +19,7 @@
 #include "base/compiler_specific.h"
 #include "base/functional/callback_helpers.h"
 #include "base/task/bind_post_task.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "media/base/starboard/starboard_rendering_mode.h"
 #include "media/mojo/services/mojo_media_log.h"
@@ -59,6 +60,11 @@ StarboardRendererWrapper::StarboardRendererWrapper(
           std::move(traits.android_overlay_factory_cb)
 #endif  // BUILDFLAG(IS_ANDROID)
       ) {
+  LOG(INFO) << "[StarboardUrlRenderer] Wrapper CONSTRUCTED - StarboardRenderer"
+            << " already created in initializer list."
+            << " URL not known yet (SetSourceUrl arrives later via Mojo)."
+            << " pid=" << getpid()
+            << " tid=" << base::PlatformThread::CurrentId();
   DETACH_FROM_THREAD(thread_checker_);
   base::SequenceBound<StarboardGpuFactoryImpl> gpu_factory_impl(
       traits.gpu_task_runner,
@@ -74,6 +80,7 @@ void StarboardRendererWrapper::Initialize(MediaResource* media_resource,
                                           PipelineStatusCallback init_cb) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(init_cb);
+  LOG(INFO) << "[StarboardUrlRenderer] Initialize called on wrapper.";
 
   DCHECK(video_geometry_setter_service_);
   video_geometry_setter_service_->GetVideoGeometryChangeSubscriber(
@@ -337,7 +344,8 @@ void StarboardRendererWrapper::OnSbWindowHandleReady(
 
 void StarboardRendererWrapper::SetSourceUrl(const std::string& source_url) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  LOG(INFO) << "StarboardRendererWrapper::SetSourceUrl: " << source_url;
+  LOG(INFO) << "[StarboardUrlRenderer] SetSourceUrl ARRIVED via Mojo: "
+            << source_url << " (wrapper+renderer already constructed above)";
   GetRenderer()->SetSourceUrl(source_url);
 }
 
@@ -379,6 +387,8 @@ void StarboardRendererWrapper::ContinueInitialization(
     RendererClient* client,
     PipelineStatusCallback init_cb) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  LOG(INFO) << "[StarboardUrlRenderer] ContinueInitialization:"
+            << " forwarding to StarboardRenderer::Initialize";
   DCHECK(init_cb);
   is_gpu_factory_initialized_ = true;
   decode_target_graphics_context_provider_.gles_context_runner_context = this;

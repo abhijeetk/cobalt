@@ -222,7 +222,9 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
      encryptedMediaCallback:
          (SbPlayerEncryptedMediaInitDataEncounteredCB)encryptedMediaCallback
             playerErrorFunc:(SbPlayerErrorFunc)errorFunc {
-  NSLog(@"[AVPlayer] initWithUrl: %@", url);
+  NSLog(@"[ABHIJEET][DRM] ApplicationPlayer initWithUrl: %@ | pid=%d thread=%@ "
+        @"isMainThread=%d",
+        url, getpid(), [NSThread currentThread], [NSThread isMainThread]);
   if (self) {
     _url = url;
     _playerContext = playerContext;
@@ -365,7 +367,11 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
              name:AVPlayerItemPlaybackStalledNotification
            object:playerItem];
 
+  NSLog(@"[ABHIJEET][DRM] About to create AVPlayer | pid=%d thread=%@ "
+        @"isMainThread=%d",
+        getpid(), [NSThread currentThread], [NSThread isMainThread]);
   _player = [AVPlayer playerWithPlayerItem:playerItem];
+  NSLog(@"[ABHIJEET][DRM] AVPlayer created: %@ | pid=%d", _player, getpid());
 
   [_player addObserver:self
             forKeyPath:@"rate"

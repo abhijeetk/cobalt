@@ -103,6 +103,14 @@ We propose checking for two markers in the URL string, either of which would ind
 | `hls_variant` | YouTube query parameter that flags HLS variant playlists. Based on C25 behavior, this should be present in production YouTube streaming. |
 | `.m3u8` | Standard HLS manifest file extension. A practical fallback for testing with third-party HLS streams. |
 
+### **MIME type support (prerequisite)**
+
+Before the detection points can trigger, the platform must report that it supports HLS content. Web apps use two APIs to query this: `video.canPlayType('application/x-mpegURL')` and `MediaSource.isTypeSupported('application/x-mpegURL')`. On Starboard builds, both paths delegate to the same platform function: `SbMediaCanPlayMimeAndKeySystem()`.
+
+On tvOS, `SbMediaCanPlayMimeAndKeySystem()` (`starboard/tvos/shared/media_can_play_mime_and_key_system.mm`) has a dedicated branch for `application/x-mpegURL`. It validates the requested codecs against what AVPlayer supports (H.264, VP9 for video; AAC, AC-3, E-AC-3 for audio) and returns `kSbMediaSupportTypeProbably`. This is what allows web apps to discover HLS capability on this platform.
+
+No new code is needed here. The existing tvOS Starboard implementation already handles this correctly. We mention it because it is the first step in the chain: YouTube's JavaScript checks these APIs to decide whether to use HLS or DASH. If the platform reports no HLS support, YouTube selects DASH and never sets an HLS URL on the `<video>` element, so the detection points described below would never trigger.
+
 ### **Detection points (two layers)**
 
 We propose intercepting the pipeline at two places. Both would perform the same URL check, but they serve different purposes:
@@ -178,10 +186,19 @@ Detailed sequence diagrams for the HLS playback flow will be added once the impl
 
 For early validation of Phase 1, we put together a [test page](https://people.igalia.com/akandalkar/hls-urlplayer-test.html) that loads a non-protected HLS stream (`.m3u8` from `test-streams.mux.dev`) using a plain `<video src>` element with no MSE involvement. It displays playback events (`loadstart`, `loadedmetadata`, `playing`, `error`) on screen to confirm the URL player path is working end-to-end.
 
-**Manual verification on tvOS device:**
+**Codec requirement:** The test stream must use codecs compatible with our AVPlayer-based URL player: H.264 video and AAC audio. AVPlayer on tvOS supports these natively. Other codecs (VP9, AV1, Opus) are not supported by AVPlayer's HLS pipeline and would fail silently.
+
+## **Manual verification on tvOS device:**
 - Audio and video play back correctly.
 - Native logs confirm `SbUrlPlayerCreate` is called instead of `SbPlayerCreate`.
 - The test page shows `playing` status, indicating the full pipeline completed successfully.
 - Standard MP4/WebM playback (non-HLS) remains unaffected by the platform guards.
 
-We are happy to adapt our test setup to any test pages or HLS streams the team recommends as we move towards integration with the YouTube app.
+## **YouTube-specific behaviors covered by the test page:**
+- Uses the `com.youtube.fairplay` key system (rather than Apple's standard `com.apple.fps`).
+- Handles the custom `fairplay` init data type that Cobalt's AVPlayer emits.
+- Validates `canPlayType('application/x-mpegURL')` as a prerequisite before attempting playback.
+- Explicitly specifies `encryptionScheme: 'cbcs'`, which FairPlay requires and Chromium does not default to.
+
+## **Limitation: YouTube web app verification is still needed.** 
+The test pages use third-party HLS streams (Mux, Axinom) to validate the general AVPlayer pipeline and FairPlay DRM flow. YouTube's HLS protocol may differ from standard HLS (e.g. the `hls_variant` query parameter, custom manifest structure, or different EME sequencing). The test pages confirm the plumbing works end-to-end, but final validation against the YouTube web app is a necessary next step. We are happy to adapt our test setup to any test pages or HLS streams the team recommends.

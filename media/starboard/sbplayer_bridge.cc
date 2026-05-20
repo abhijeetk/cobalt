@@ -24,6 +24,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/starboard/buildflags.h"
@@ -608,7 +609,9 @@ void SbPlayerBridge::CreateUrlPlayer(const std::string& url) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   DCHECK(!on_encrypted_media_init_data_encountered_cb_.is_null());
-  LOG(INFO) << "CreateUrlPlayer passed url " << url;
+  LOG(INFO) << "[ABHIJEET][DRM] SbPlayerBridge::CreateUrlPlayer pid="
+            << getpid() << " tid=" << base::PlatformThread::CurrentId()
+            << " url=" << url;
 
 #if BUILDFLAG(COBALT_MEDIA_ENABLE_FORMAT_SUPPORT_QUERY_METRICS)
   if (max_video_capabilities_.empty()) {

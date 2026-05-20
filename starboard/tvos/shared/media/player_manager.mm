@@ -47,6 +47,9 @@
                        playerErrorFunc:(SbPlayerErrorFunc)errorFunc {
   __block SBDApplicationPlayer* player;
   onApplicationMainThread(^{
+    NSLog(@"[ABHIJEET][DRM] PlayerManager: allocating ApplicationPlayer on "
+          @"main thread pid=%d isMainThread=%d",
+          getpid(), [NSThread isMainThread]);
     player = [[SBDApplicationPlayer alloc] initWithUrl:url
                                          playerContext:playerContext
                                       playerStatusFunc:statusFunc

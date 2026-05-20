@@ -163,10 +163,51 @@ Several properties are set by Chromium BEFORE the native AVPlayer is created. Th
 
 Any new properties that need to survive across this gap should follow the same pattern: store in `StarboardRenderer`, re-apply in `OnPlayerStatus(kSbPlayerStatePresenting)`.
 
-## 5. Challenges
+## 5. End-of-Stream (EOS) -- Already Working
+
+```
+AVPlayerItemDidPlayToEndTimeNotification
+  -> ApplicationPlayer::playerItemDidReachEnd:
+    -> updatePlayerState:kSbPlayerStateEndOfStream
+      -> SbPlayerBridge::PlayerStatusCB -> OnPlayerStatus()
+        -> StarboardRenderer::OnPlayerStatus(kSbPlayerStateEndOfStream)
+          -> client_->OnEnded()
+            -> StarboardRendererClient::OnEnded() -> Mojo
+              -> WebMediaPlayerImpl::OnEnded() [sets ended_=true]
+                -> HTMLMediaElement::TimeChanged()
+                  -> ScheduleNamedEvent('ended')
+                    -> JS 'ended' event
+```
+
+No gaps. Verified by code trace (not yet device-tested to end of stream).
+
+## 6. Error Handling -- Already Working
+
+```
+AVPlayerItemStatusFailed (KVO on currentItem.status)
+  -> ApplicationPlayer::playerItemStatusDidChange
+    -> updatePlayerError:kSbPlayerErrorDecode message:error.description
+      -> SbPlayerBridge::PlayerErrorCB -> OnPlayerError()
+        -> StarboardRenderer::OnPlayerError()
+          -> NotifyError(PIPELINE_ERROR_DECODE)
+            -> client_->OnError(status)
+              -> StarboardRendererClient::OnError() -> Mojo
+                -> WebMediaPlayerImpl::OnError()
+                  -> SetNetworkState(kNetworkStateDecodeError)
+                    -> JS 'error' event (video.error.code)
+```
+
+Error mapping: `kSbPlayerErrorDecode` -> `PIPELINE_ERROR_DECODE`, `kSbPlayerErrorCapabilityChanged` -> `PIPELINE_ERROR_DECODE`. No gaps.
+
+## 7. Remaining Items
+
+| Item | Status | Priority |
+|------|--------|----------|
+| NetworkState transitions | Not mapped (stays at LOADING=2) | Low -- YouTube app unlikely to depend on it |
+| QoE/dropped frames | Flows via `GetMediaTime()` -> `OnStatisticsUpdate` | Low -- needs device verification |
+
+## 8. Challenges
 *   **Mojo Latency:** Minimizing lag between GPU-reported time and Renderer-side queries. Mitigated by `MediaTimeInterpolator` in `MojoRenderer`.
-*   **End-of-Stream (EOS):** Mapping `AVPlayerItemDidPlayToEndTimeNotification` to Chromium's `OnEnded()`.
-*   **Error Mapping:** Translating native CoreMedia errors (e.g., `-19152`) to Chromium `PipelineStatus`.
 
 ## 6. Completed Tasks
 

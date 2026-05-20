@@ -278,10 +278,11 @@ void StarboardRendererClient::SetSourceUrl(const std::string& source_url) {
 
 void StarboardRendererClient::OnDurationChange(base::TimeDelta duration) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  DVLOG(1) << "OnDurationChange: " << duration;
-  // TODO: Forward duration to pipeline. PipelineImpl gets duration from
-  // DemuxerHost, not RendererClient. May need to call
-  // WebMediaPlayerImpl::OnDurationChange() directly or update demuxer host.
+  LOG(INFO) << "[Phase3-Play-Pause] StarboardRendererClient::OnDurationChange: "
+            << duration;
+  if (duration_change_cb_) {
+    duration_change_cb_.Run(duration);
+  }
 }
 
 void StarboardRendererClient::OnEncryptedMediaInitDataEncountered(

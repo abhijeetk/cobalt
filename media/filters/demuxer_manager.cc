@@ -434,6 +434,17 @@ void DemuxerManager::OnDataSourcePlaybackRateChange(double rate, bool paused) {
 
 void DemuxerManager::DurationChanged() {}
 
+void DemuxerManager::SetDuration(base::TimeDelta duration) {
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  if (demuxer_ &&
+      demuxer_->GetDemuxerType() == DemuxerType::kUrlPlayerDemuxer) {
+    static_cast<UrlPlayerDemuxer*>(demuxer_.get())->SetDuration(duration);
+    return;
+  }
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
+  LOG(WARNING) << "[Phase3-Play-Pause] SetDuration: no UrlPlayerDemuxer found";
+}
+
 bool DemuxerManager::WouldTaintOrigin() const {
   if (hls_fallback_) {
     // TODO(crbug.com/410588476): return data_source_info_->WouldTaintOrigin();

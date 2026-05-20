@@ -96,6 +96,7 @@ DemuxerType UrlPlayerDemuxer::GetDemuxerType() const {
 void UrlPlayerDemuxer::Initialize(DemuxerHost* host,
                                   PipelineStatusCallback status_cb) {
   LOG(INFO) << "UrlPlayerDemuxer::Initialize() - immediately succeeding.";
+  host_ = host;
   // Post the callback to avoid reentrancy issues.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(status_cb), PIPELINE_OK));
@@ -144,5 +145,13 @@ void UrlPlayerDemuxer::OnTracksChanged(
     TrackChangeCB change_completed_cb) {}
 
 void UrlPlayerDemuxer::SetPlaybackRate(double rate) {}
+
+void UrlPlayerDemuxer::SetDuration(base::TimeDelta duration) {
+  LOG(INFO) << "[Phase3-Play-Pause] UrlPlayerDemuxer::SetDuration: "
+            << duration;
+  if (host_) {
+    host_->SetDuration(duration);
+  }
+}
 
 }  // namespace media

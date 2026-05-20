@@ -3072,6 +3072,13 @@ std::unique_ptr<media::Renderer> WebMediaPlayerImpl::CreateRenderer(
       starboard_client->SetEncryptedMediaInitDataCB(base::BindPostTaskToCurrentDefault(
           base::BindRepeating(&media::DemuxerManager::OnEncryptedMediaInitData,
                               base::Unretained(demuxer_manager_.get()))));
+
+      // Wire duration callback: GPU process reports duration from AVPlayer,
+      // forward to DemuxerManager -> UrlPlayerDemuxer -> DemuxerHost::SetDuration
+      // -> PipelineImpl::OnDurationChange -> WebMediaPlayerImpl::OnDurationChange.
+      starboard_client->SetDurationChangeCB(base::BindPostTaskToCurrentDefault(
+          base::BindRepeating(&media::DemuxerManager::SetDuration,
+                              base::Unretained(demuxer_manager_.get()))));
     }
   }
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA) && SB_HAS(PLAYER_WITH_URL)

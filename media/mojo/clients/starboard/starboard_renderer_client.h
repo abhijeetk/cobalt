@@ -81,6 +81,13 @@ class MEDIA_EXPORT StarboardRendererClient
   void SetEncryptedMediaInitDataCB(EncryptedMediaInitDataCB cb) {
     encrypted_media_init_data_cb_ = std::move(cb);
   }
+
+  // Callback to forward duration from native player to the pipeline.
+  using DurationChangeCB =
+      base::RepeatingCallback<void(base::TimeDelta duration)>;
+  void SetDurationChangeCB(DurationChangeCB cb) {
+    duration_change_cb_ = std::move(cb);
+  }
 #endif  // SB_HAS(PLAYER_WITH_URL)
 
   ~StarboardRendererClient() override;
@@ -168,6 +175,7 @@ class MEDIA_EXPORT StarboardRendererClient
   raw_ptr<GpuVideoAcceleratorFactories> gpu_factories_ = nullptr;
 #if SB_HAS(PLAYER_WITH_URL)
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
+  DurationChangeCB duration_change_cb_;
 #endif  // SB_HAS(PLAYER_WITH_URL)
 #if BUILDFLAG(IS_ANDROID)
   RequestOverlayInfoCB request_overlay_info_cb_;

@@ -145,6 +145,10 @@ class MEDIA_EXPORT DemuxerManager {
   // Signal that a demuxer (or renderer) has caused a duration change.
   void DurationChanged();
 
+  // Set duration on the underlying demuxer (for URL players where duration
+  // comes from the native player, not from parsing the media stream).
+  void SetDuration(base::TimeDelta duration);
+
   bool WouldTaintOrigin() const;
   bool HasDataSource() const;
   bool HasDemuxer() const;

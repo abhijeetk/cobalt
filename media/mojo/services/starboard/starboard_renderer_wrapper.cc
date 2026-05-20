@@ -120,6 +120,8 @@ void StarboardRendererWrapper::Initialize(MediaResource* media_resource,
   GetRenderer()->SetEncryptedMediaInitDataCB(base::BindRepeating(
       &StarboardRendererWrapper::OnEncryptedMediaInitDataEncountered,
       weak_factory_.GetWeakPtr()));
+  GetRenderer()->SetDurationChangeCB(base::BindRepeating(
+      &StarboardRendererWrapper::OnDurationChange, weak_factory_.GetWeakPtr()));
 #endif  // SB_HAS(PLAYER_WITH_URL)
 
   base::ScopedClosureRunner scoped_init_cb(
@@ -430,6 +432,12 @@ void StarboardRendererWrapper::OnEncryptedMediaInitDataEncountered(
             << " type=" << init_data_type << " length=" << init_data.size();
   client_extension_remote_->OnEncryptedMediaInitDataEncountered(init_data_type,
                                                                 init_data);
+}
+
+void StarboardRendererWrapper::OnDurationChange(base::TimeDelta duration) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  LOG(INFO) << "[Phase3-Play-Pause] Wrapper forwarding duration: " << duration;
+  client_extension_remote_->OnDurationChange(duration);
 }
 #endif  // SB_HAS(PLAYER_WITH_URL)
 

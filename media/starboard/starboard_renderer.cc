@@ -1129,6 +1129,13 @@ void StarboardRenderer::OnPlayerStatus(SbPlayerState state) {
           client_->OnVideoNaturalSizeChange(default_size);
           paint_video_hole_frame_cb_.Run(default_size);
         }
+
+        // Report duration from native player to the pipeline.
+        TimeDelta duration = player_bridge_->GetDuration();
+        LOG(INFO) << "[Phase3-Play-Pause] URL player duration: " << duration;
+        if (duration > TimeDelta() && duration_change_cb_) {
+          duration_change_cb_.Run(duration);
+        }
       }
 #endif  // SB_HAS(PLAYER_WITH_URL)
       break;

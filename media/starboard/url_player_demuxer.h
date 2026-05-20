@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "media/base/demuxer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
@@ -84,8 +85,13 @@ class MEDIA_EXPORT UrlPlayerDemuxer : public Demuxer {
                        TrackChangeCB change_completed_cb) override;
   void SetPlaybackRate(double rate) override;
 
+  // Called from the renderer process when the native player reports duration.
+  // Pushes duration into the pipeline via the DemuxerHost.
+  void SetDuration(base::TimeDelta duration);
+
  private:
   const GURL url_;
+  raw_ptr<DemuxerHost> host_ = nullptr;
   UrlPlayerDemuxerStream audio_stream_{DemuxerStream::AUDIO};
   UrlPlayerDemuxerStream video_stream_{DemuxerStream::VIDEO};
 };

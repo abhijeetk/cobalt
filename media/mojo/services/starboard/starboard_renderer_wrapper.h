@@ -128,6 +128,7 @@ class StarboardRendererWrapper
   void OnEncryptedMediaInitDataEncountered(
       const std::string& init_data_type,
       const std::vector<uint8_t>& init_data);
+  void OnDurationChange(base::TimeDelta duration);
 #endif  // SB_HAS(PLAYER_WITH_URL)
   void OnSubscribeToVideoGeometryChange(MediaResource* media_resource,
                                         RendererClient* client);

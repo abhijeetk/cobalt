@@ -285,6 +285,15 @@ void StarboardRendererClient::OnDurationChange(base::TimeDelta duration) {
   }
 }
 
+void StarboardRendererClient::OnBufferedTimeRangesChange(
+    base::TimeDelta start,
+    base::TimeDelta length) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  if (buffered_ranges_cb_) {
+    buffered_ranges_cb_.Run(start, length);
+  }
+}
+
 void StarboardRendererClient::OnEncryptedMediaInitDataEncountered(
     const std::string& init_data_type,
     const std::vector<uint8_t>& init_data) {

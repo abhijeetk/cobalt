@@ -89,6 +89,9 @@ class MEDIA_EXPORT UrlPlayerDemuxer : public Demuxer {
   // Pushes duration into the pipeline via the DemuxerHost.
   void SetDuration(base::TimeDelta duration);
 
+  // Called from the renderer process with buffered ranges from AVPlayer.
+  void SetBufferedTimeRanges(base::TimeDelta start, base::TimeDelta length);
+
  private:
   const GURL url_;
   raw_ptr<DemuxerHost> host_ = nullptr;

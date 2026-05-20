@@ -445,6 +445,18 @@ void DemuxerManager::SetDuration(base::TimeDelta duration) {
   LOG(WARNING) << "[Phase3-Play-Pause] SetDuration: no UrlPlayerDemuxer found";
 }
 
+void DemuxerManager::SetBufferedTimeRanges(base::TimeDelta start,
+                                           base::TimeDelta length) {
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  if (demuxer_ &&
+      demuxer_->GetDemuxerType() == DemuxerType::kUrlPlayerDemuxer) {
+    static_cast<UrlPlayerDemuxer*>(demuxer_.get())
+        ->SetBufferedTimeRanges(start, length);
+    return;
+  }
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
+}
+
 bool DemuxerManager::WouldTaintOrigin() const {
   if (hls_fallback_) {
     // TODO(crbug.com/410588476): return data_source_info_->WouldTaintOrigin();

@@ -503,6 +503,18 @@ TimeDelta StarboardRenderer::GetMediaTime() {
   }
   StoreMediaTime(media_time);
 
+#if SB_HAS(PLAYER_WITH_URL)
+  // For URL players, poll buffered ranges while querying media time.
+  if (!source_url_.empty() && buffered_ranges_cb_) {
+    TimeDelta buffer_start, buffer_length;
+    player_bridge_->GetUrlPlayerBufferedTimeRanges(&buffer_start,
+                                                   &buffer_length);
+    if (buffer_length > TimeDelta()) {
+      buffered_ranges_cb_.Run(buffer_start, buffer_length);
+    }
+  }
+#endif  // SB_HAS(PLAYER_WITH_URL)
+
   return media_time;
 }
 

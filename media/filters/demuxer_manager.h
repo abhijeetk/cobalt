@@ -149,6 +149,9 @@ class MEDIA_EXPORT DemuxerManager {
   // comes from the native player, not from parsing the media stream).
   void SetDuration(base::TimeDelta duration);
 
+  // Set buffered time ranges on the underlying demuxer (for URL players).
+  void SetBufferedTimeRanges(base::TimeDelta start, base::TimeDelta length);
+
   bool WouldTaintOrigin() const;
   bool HasDataSource() const;
   bool HasDemuxer() const;

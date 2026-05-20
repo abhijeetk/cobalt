@@ -138,6 +138,13 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
   void SetDurationChangeCB(DurationChangeCB cb) {
     duration_change_cb_ = std::move(cb);
   }
+
+  using BufferedRangesCB =
+      base::RepeatingCallback<void(base::TimeDelta start,
+                                   base::TimeDelta length)>;
+  void SetBufferedRangesCB(BufferedRangesCB cb) {
+    buffered_ranges_cb_ = std::move(cb);
+  }
   void OnEncryptedMediaInitDataEncountered(const char* init_data_type,
                                            const unsigned char* init_data,
                                            unsigned int init_data_length);
@@ -227,6 +234,7 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
 #if SB_HAS(PLAYER_WITH_URL)
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
   DurationChangeCB duration_change_cb_;
+  BufferedRangesCB buffered_ranges_cb_;
 #endif  // SB_HAS(PLAYER_WITH_URL)
   const StarboardRendererConfig::ExperimentalFeatures experimental_features_;
   // TODO: b/375674101 - Connect this to h5vcc setting.

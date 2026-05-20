@@ -3079,6 +3079,13 @@ std::unique_ptr<media::Renderer> WebMediaPlayerImpl::CreateRenderer(
       starboard_client->SetDurationChangeCB(base::BindPostTaskToCurrentDefault(
           base::BindRepeating(&media::DemuxerManager::SetDuration,
                               base::Unretained(demuxer_manager_.get()))));
+
+      // Wire buffered ranges callback: GPU process polls AVPlayer's
+      // loadedTimeRanges, forward to UrlPlayerDemuxer ->
+      // DemuxerHost::OnBufferedTimeRangesChanged -> JS video.buffered.
+      starboard_client->SetBufferedRangesCB(base::BindPostTaskToCurrentDefault(
+          base::BindRepeating(&media::DemuxerManager::SetBufferedTimeRanges,
+                              base::Unretained(demuxer_manager_.get()))));
     }
   }
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA) && SB_HAS(PLAYER_WITH_URL)

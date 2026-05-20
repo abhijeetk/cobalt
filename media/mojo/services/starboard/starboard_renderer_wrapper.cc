@@ -122,6 +122,9 @@ void StarboardRendererWrapper::Initialize(MediaResource* media_resource,
       weak_factory_.GetWeakPtr()));
   GetRenderer()->SetDurationChangeCB(base::BindRepeating(
       &StarboardRendererWrapper::OnDurationChange, weak_factory_.GetWeakPtr()));
+  GetRenderer()->SetBufferedRangesCB(
+      base::BindRepeating(&StarboardRendererWrapper::OnBufferedTimeRangesChange,
+                          weak_factory_.GetWeakPtr()));
 #endif  // SB_HAS(PLAYER_WITH_URL)
 
   base::ScopedClosureRunner scoped_init_cb(
@@ -438,6 +441,13 @@ void StarboardRendererWrapper::OnDurationChange(base::TimeDelta duration) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   LOG(INFO) << "[Phase3-Play-Pause] Wrapper forwarding duration: " << duration;
   client_extension_remote_->OnDurationChange(duration);
+}
+
+void StarboardRendererWrapper::OnBufferedTimeRangesChange(
+    base::TimeDelta start,
+    base::TimeDelta length) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  client_extension_remote_->OnBufferedTimeRangesChange(start, length);
 }
 #endif  // SB_HAS(PLAYER_WITH_URL)
 

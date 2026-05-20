@@ -88,6 +88,13 @@ class MEDIA_EXPORT StarboardRendererClient
   void SetDurationChangeCB(DurationChangeCB cb) {
     duration_change_cb_ = std::move(cb);
   }
+
+  using BufferedRangesCB =
+      base::RepeatingCallback<void(base::TimeDelta start,
+                                   base::TimeDelta length)>;
+  void SetBufferedRangesCB(BufferedRangesCB cb) {
+    buffered_ranges_cb_ = std::move(cb);
+  }
 #endif  // SB_HAS(PLAYER_WITH_URL)
 
   ~StarboardRendererClient() override;
@@ -126,6 +133,8 @@ class MEDIA_EXPORT StarboardRendererClient
   void UpdateStarboardRenderingMode(const StarboardRenderingMode mode) override;
   void GetSbWindowHandle() override;
   void OnDurationChange(base::TimeDelta duration) override;
+  void OnBufferedTimeRangesChange(base::TimeDelta start,
+                                  base::TimeDelta length) override;
   void OnEncryptedMediaInitDataEncountered(
       const std::string& init_data_type,
       const std::vector<uint8_t>& init_data) override;
@@ -176,6 +185,7 @@ class MEDIA_EXPORT StarboardRendererClient
 #if SB_HAS(PLAYER_WITH_URL)
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
   DurationChangeCB duration_change_cb_;
+  BufferedRangesCB buffered_ranges_cb_;
 #endif  // SB_HAS(PLAYER_WITH_URL)
 #if BUILDFLAG(IS_ANDROID)
   RequestOverlayInfoCB request_overlay_info_cb_;

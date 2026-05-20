@@ -154,4 +154,13 @@ void UrlPlayerDemuxer::SetDuration(base::TimeDelta duration) {
   }
 }
 
+void UrlPlayerDemuxer::SetBufferedTimeRanges(base::TimeDelta start,
+                                             base::TimeDelta length) {
+  if (host_) {
+    Ranges<base::TimeDelta> ranges;
+    ranges.Add(start, start + length);
+    host_->OnBufferedTimeRangesChanged(ranges);
+  }
+}
+
 }  // namespace media

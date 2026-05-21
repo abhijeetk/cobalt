@@ -21,6 +21,7 @@
 #include "base/trace_event/trace_event.h"
 #include "crypto/aes_cbc.h"
 #include "media/base/audio_codecs.h"
+#include "media/base/eme_constants.h"
 #include "media/base/media_log.h"
 #include "media/base/media_track.h"
 #include "media/base/media_util.h"
@@ -821,6 +822,39 @@ void HlsManifestDemuxerEngine::OnMediaPlaylist(
     scoped_refptr<hls::MediaPlaylist> playlist) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(media_sequence_checker_);
 
+  // Signal DRM init data from the manifest's EXT-X-KEY tag. For FairPlay
+  // (SAMPLE-AES with skd:// URI), fire the skd:// URI as EME init data so
+  // JavaScript can initiate the key exchange. This must happen early, before
+  // segments are fetched, so the CDM can have the key ready when encrypted
+  // samples arrive at the decoder.
+  const auto& segments = playlist->GetSegments();
+  if (!segments.empty()) {
+    if (auto enc_data = segments[0]->GetEncryptionData()) {
+      auto method = enc_data->GetMethod();
+      if (method == hls::XKeyTagMethod::kSampleAES ||
+          method == hls::XKeyTagMethod::kSampleAESCTR ||
+          method == hls::XKeyTagMethod::kSampleAESCENC) {
+        const std::string key_uri =
+            enc_data->GetUri().possibly_invalid_spec();
+        LOG(INFO) << "[ABHIJEET][HLS] OnMediaPlaylist: DRM detected"
+                  << " method=" << static_cast<int>(method)
+                  << " keyformat=" << static_cast<int>(enc_data->GetKeyFormat())
+                  << " uri=" << key_uri
+                  << " role=" << parse_info.role;
+        if (!key_uri.empty() &&
+            (key_uri.find("skd://") == 0 || key_uri.find("skd:") == 0) &&
+            signaled_drm_uris_.find(key_uri) == signaled_drm_uris_.end()) {
+          signaled_drm_uris_.insert(key_uri);
+          std::vector<uint8_t> init_data(key_uri.begin(), key_uri.end());
+          LOG(INFO) << "[ABHIJEET][HLS] Firing SKD init data from manifest"
+                    << " size=" << init_data.size()
+                    << " uri=" << key_uri;
+          host_->OnEncryptedMediaInitData(EmeInitDataType::SKD, init_data);
+        }
+      }
+    }
+  }
+
   // TODO(crbug.com/40057824) On stream adaptation, if the codecs are not the
   // same, we'll have to re-create the chunk demuxer role. For now, just
   // assume the codecs are the same.
@@ -993,7 +1027,43 @@ void HlsManifestDemuxerEngine::DetermineBitstreamContainer(
             maybe_plaintext->data(), maybe_plaintext->size()));
         return;
       }
+      case hls::XKeyTagMethod::kSampleAES:
+      case hls::XKeyTagMethod::kSampleAESCTR:
+      case hls::XKeyTagMethod::kSampleAESCENC:
+      case hls::XKeyTagMethod::kISO230017: {
+        // DRM-based encryption (e.g., FairPlay SAMPLE-AES). Do NOT decrypt
+        // in software. Pass the encrypted segment through; decryption is
+        // handled by the platform decoder (AVSBDL + FairPlay key attachment).
+        // Signal the DRM key URI to EME so JS can initiate key exchange.
+        LOG(INFO) << "[ABHIJEET][HLS] DRM encryption method="
+                  << static_cast<int>(enc_data->GetMethod())
+                  << " - passing segment through (no software decrypt)"
+                  << " key_uri=" << enc_data->GetUri().possibly_invalid_spec();
+
+        // Fire the encrypted media init data event with the skd:// URI.
+        // The URI is sent as the init data bytes (UTF-8 encoded).
+        const std::string& key_uri = enc_data->GetUri().possibly_invalid_spec();
+        if (!key_uri.empty()) {
+          std::vector<uint8_t> init_data(key_uri.begin(), key_uri.end());
+          // Determine init data type based on URI scheme.
+          EmeInitDataType init_data_type = EmeInitDataType::UNKNOWN;
+          if (key_uri.find("skd://") == 0 || key_uri.find("skd:") == 0) {
+            init_data_type = EmeInitDataType::SKD;
+          } else {
+            init_data_type = EmeInitDataType::KEYIDS;
+          }
+          LOG(INFO) << "[ABHIJEET][HLS] Firing OnEncryptedMediaInitData"
+                    << " type=" << static_cast<int>(init_data_type)
+                    << " uri=" << key_uri
+                    << " data_size=" << init_data.size();
+          host_->OnEncryptedMediaInitData(init_data_type, init_data);
+        }
+        // Fall through to process the segment as-is (encrypted).
+        break;
+      }
       default: {
+        LOG(ERROR) << "[ABHIJEET][HLS] Unsupported crypto method: "
+                   << static_cast<int>(enc_data->GetMethod());
         std::move(cb).Run(HlsDemuxerStatus::Codes::kUnsupportedCryptoMethod);
         return;
       }

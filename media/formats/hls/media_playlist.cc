@@ -11,6 +11,7 @@
 #include <variant>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/clamped_math.h"
 #include "base/time/time.h"
@@ -286,10 +287,40 @@ ParseStatus::Or<scoped_refptr<MediaPlaylist>> MediaPlaylist::Parse(
             }
             encryption_data = nullptr;
           } else {
-            auto resource_uri = uri.Resolve(value.uri.value().Str());
+            auto uri_str = value.uri.value().Str();
+            LOG(INFO) << "[ABHIJEET][HLS] EXT-X-KEY resolution: " << uri_str;
+            auto resource_uri = uri.Resolve(uri_str);
             if (!resource_uri.is_valid()) {
-              return ParseStatusCode::kInvalidUri;
+              // DRM key URIs (e.g., skd://, data:) may use schemes unknown to
+              // GURL. For SAMPLE-AES and related DRM methods, preserve the raw
+              // URI string as a GURL rather than resolving against the playlist
+              // base. The URI will be passed to EME as init data, not fetched.
+              if (value.method == XKeyTagMethod::kSampleAES ||
+                  value.method == XKeyTagMethod::kSampleAESCTR ||
+                  value.method == XKeyTagMethod::kSampleAESCENC ||
+                  value.method == XKeyTagMethod::kISO230017) {
+                LOG(INFO)
+                    << "[ABHIJEET][HLS] EXT-X-KEY: DRM URI not resolvable"
+                    << " (scheme not registered), using raw URI: " << uri_str
+                    << " method="
+                    << static_cast<int>(value.method);
+                resource_uri = GURL(uri_str);
+                // If still invalid (e.g., truly malformed), keep going with the
+                // raw URI. The downstream EME path will use the string form.
+              } else {
+                LOG(ERROR) << "[ABHIJEET][HLS] EXT-X-KEY: invalid URI: "
+                           << uri_str
+                           << " method=" << static_cast<int>(value.method);
+                return ParseStatusCode::kInvalidUri;
+              }
             }
+            LOG(INFO) << "[ABHIJEET][HLS] EXT-X-KEY parsed:"
+                      << " method=" << static_cast<int>(value.method)
+                      << " uri=" << resource_uri.possibly_invalid_spec()
+                      << " valid=" << resource_uri.is_valid()
+                      << " keyformat="
+                      << static_cast<int>(value.keyformat)
+                      << " has_iv=" << value.iv.has_value();
             new_encryption_data = true;
             encryption_data =
                 base::MakeRefCounted<MediaSegment::EncryptionData>(

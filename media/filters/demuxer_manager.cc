@@ -581,7 +581,10 @@ DemuxerManager::CreateHlsDemuxer() {
           base::BindPostTaskToCurrentDefault(
               base::BindRepeating(&DemuxerManager::DemuxerRequestsSeek,
                                   weak_factory_.GetWeakPtr())),
-          std::move(engine), media_log_.get()));
+          std::move(engine), media_log_.get(),
+          base::BindPostTaskToCurrentDefault(
+              base::BindRepeating(&DemuxerManager::OnEncryptedMediaInitData,
+                                  weak_factory_.GetWeakPtr()))));
 }
 #endif
 

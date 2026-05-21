@@ -104,6 +104,11 @@ class MEDIA_EXPORT ManifestDemuxerEngineHost {
 
   virtual void SetEndOfStream() = 0;
   virtual void UnsetEndOfStream() = 0;
+
+  // Signal encrypted media init data (e.g., skd:// URI from HLS EXT-X-KEY).
+  // This allows the HLS engine to trigger EME key exchange for DRM content.
+  virtual void OnEncryptedMediaInitData(EmeInitDataType type,
+                                        const std::vector<uint8_t>& data) = 0;
 };
 
 // A Demuxer designed to allow implementation of media demuxers which don't
@@ -180,7 +185,9 @@ class MEDIA_EXPORT ManifestDemuxer : public Demuxer, ManifestDemuxerEngineHost {
   ManifestDemuxer(scoped_refptr<base::SequencedTaskRunner> media_task_runner,
                   base::RepeatingCallback<void(base::TimeDelta)> request_seek,
                   std::unique_ptr<Engine> impl,
-                  MediaLog* media_log);
+                  MediaLog* media_log,
+                  EncryptedMediaInitDataCB encrypted_media_init_data_cb =
+                      EncryptedMediaInitDataCB());
 
   ~ManifestDemuxer() override;
 
@@ -238,6 +245,8 @@ class MEDIA_EXPORT ManifestDemuxer : public Demuxer, ManifestDemuxerEngineHost {
                               base::TimeDelta time) override;
   void SetEndOfStream() override;
   void UnsetEndOfStream() override;
+  void OnEncryptedMediaInitData(EmeInitDataType type,
+                                const std::vector<uint8_t>& data) override;
 
   // Allow unit tests to grab the chunk demuxer.
   ChunkDemuxer* GetChunkDemuxerForTesting();
@@ -360,6 +369,10 @@ class MEDIA_EXPORT ManifestDemuxer : public Demuxer, ManifestDemuxerEngineHost {
   // A pending "next event" callback, which can be canceled in the case of a
   // seek or a playback rate change.
   base::CancelableOnceClosure cancelable_next_event_;
+
+  // Callback to forward encrypted media init data (e.g., skd:// from HLS
+  // EXT-X-KEY) to the pipeline for EME key exchange.
+  EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
 
   base::WeakPtrFactory<ManifestDemuxer> weak_factory_{this};
 };

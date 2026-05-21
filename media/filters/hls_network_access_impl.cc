@@ -108,7 +108,15 @@ void HlsNetworkAccessImpl::ReadMediaSegment(const hls::MediaSegment& segment,
   queue.emplace(segment.GetUri(), segment.GetByteRange(), false);
 
   if (auto enc_data = segment.GetEncryptionData()) {
-    if (enc_data->NeedsKeyFetch()) {
+    auto method = enc_data->GetMethod();
+    // For DRM-based encryption (SAMPLE-AES, etc.), the key is managed by
+    // EME/CDM, not fetched by the HLS engine. Skip key fetch for these methods.
+    bool is_drm_method =
+        (method == hls::XKeyTagMethod::kSampleAES ||
+         method == hls::XKeyTagMethod::kSampleAESCTR ||
+         method == hls::XKeyTagMethod::kSampleAESCENC ||
+         method == hls::XKeyTagMethod::kISO230017);
+    if (!is_drm_method && enc_data->NeedsKeyFetch()) {
       ReadKey(
           *enc_data,
           base::BindOnce(

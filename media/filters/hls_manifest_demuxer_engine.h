@@ -9,6 +9,8 @@
 #include <string_view>
 #include <vector>
 
+#include <set>
+
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_bound.h"
@@ -336,6 +338,10 @@ class MEDIA_EXPORT HlsManifestDemuxerEngine : public ManifestDemuxer::Engine,
 
   hls::HlsStatsReporter stats_reporter_
       GUARDED_BY_CONTEXT(media_sequence_checker_);
+
+  // Track DRM key URIs already signaled to EME to avoid duplicate events
+  // on playlist reloads (live/adaptive streams).
+  std::set<std::string> signaled_drm_uris_;
 
   // Ensure that safe member fields are only accessed on the media sequence.
   SEQUENCE_CHECKER(media_sequence_checker_);

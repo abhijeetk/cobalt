@@ -81,14 +81,16 @@ ManifestDemuxer::ManifestDemuxer(
     scoped_refptr<base::SequencedTaskRunner> media_task_runner,
     base::RepeatingCallback<void(base::TimeDelta)> request_seek,
     std::unique_ptr<ManifestDemuxer::Engine> impl,
-    MediaLog* media_log)
+    MediaLog* media_log,
+    EncryptedMediaInitDataCB encrypted_media_init_data_cb)
     : request_seek_(std::move(request_seek)),
       media_log_(media_log->Clone()),
       media_task_runner_(std::move(media_task_runner)),
-      impl_(std::move(impl)) {
-        media_log_->AddMessage(MediaLogMessageLevel::kINFO,
-          "Demuxing stream using ManifestDemuxer");
-      }
+      impl_(std::move(impl)),
+      encrypted_media_init_data_cb_(std::move(encrypted_media_init_data_cb)) {
+  media_log_->AddMessage(MediaLogMessageLevel::kINFO,
+                         "Demuxing stream using ManifestDemuxer");
+}
 
 std::vector<DemuxerStream*> ManifestDemuxer::GetAllStreams() {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
@@ -651,7 +653,27 @@ void ManifestDemuxer::OnChunkDemuxerTracksChanged(
 void ManifestDemuxer::OnEncryptedMediaData(EmeInitDataType type,
                                            const std::vector<uint8_t>& data) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  OnError(PIPELINE_ERROR_INVALID_STATE);
+  LOG(INFO) << "[ABHIJEET][HLS] ManifestDemuxer::OnEncryptedMediaData"
+            << " (from ChunkDemuxer)"
+            << " type=" << static_cast<int>(type)
+            << " data_size=" << data.size();
+  // Forward to the ManifestDemuxerEngineHost implementation.
+  OnEncryptedMediaInitData(type, data);
+}
+
+void ManifestDemuxer::OnEncryptedMediaInitData(
+    EmeInitDataType type,
+    const std::vector<uint8_t>& data) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  LOG(INFO) << "[ABHIJEET][HLS] ManifestDemuxer::OnEncryptedMediaInitData"
+            << " type=" << static_cast<int>(type)
+            << " data_size=" << data.size();
+  if (encrypted_media_init_data_cb_) {
+    encrypted_media_init_data_cb_.Run(type, data);
+  } else {
+    LOG(ERROR) << "[ABHIJEET][HLS] No encrypted_media_init_data_cb_ set!";
+    OnError(PIPELINE_ERROR_INVALID_STATE);
+  }
 }
 
 void ManifestDemuxer::OnDemuxerStreamRead(

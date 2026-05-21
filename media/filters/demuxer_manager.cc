@@ -352,6 +352,25 @@ PipelineStatus DemuxerManager::CreateDemuxer(
 #elif BUILDFLAG(USE_STARBOARD_MEDIA)
     {
       const std::string& spec = loaded_url_.spec();
+#if BUILDFLAG(ENABLE_HLS_DEMUXER)
+      // POC: Route to Chromium's built-in HLS demuxer when the URL contains
+      // "use_hls_demuxer". This enables the AVSBDL+FairPlay path (stream-based
+      // HLS without AVPlayer) for testing while keeping UrlPlayerDemuxer as
+      // the default production path.
+      if (spec.find("use_hls_demuxer") != std::string::npos &&
+          (spec.find(".m3u8") != std::string::npos ||
+           spec.find("hls_variant") != std::string::npos ||
+           spec.find("hls_playlist") != std::string::npos)) {
+        LOG(INFO) << "[URL-ROUTING] DemuxerManager::CreateDemuxer — "
+                  << "POC: using built-in HLS demuxer for URL: " << spec;
+        std::unique_ptr<Demuxer> demuxer;
+        std::tie(data_source_info_, demuxer) = CreateHlsDemuxer();
+        SetDemuxer(std::move(demuxer));
+        return std::move(on_demuxer_created)
+            .Run(demuxer_.get(), suspended_mode, /*is_streaming=*/false,
+                 /*is_static=*/false);
+      }
+#endif  // BUILDFLAG(ENABLE_HLS_DEMUXER)
       if (spec.find("hls_variant") != std::string::npos ||
           spec.find("hls_playlist") != std::string::npos ||
           spec.find(".m3u8") != std::string::npos) {

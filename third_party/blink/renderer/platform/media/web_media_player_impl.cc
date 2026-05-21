@@ -2298,18 +2298,22 @@ void WebMediaPlayerImpl::OnProgress() {
 }
 
 bool WebMediaPlayerImpl::CanPlayThrough() {
-  if (!base::FeatureList::IsEnabled(media::kSpecCompliantCanPlayThrough))
-    return true;
-  if (GetDemuxerType() == media::DemuxerType::kChunkDemuxer)
-    return true;
-#if BUILDFLAG(USE_STARBOARD_MEDIA)
-  // URL players (AVPlayer/HLS) manage their own buffering natively.
-  // CanPlayThrough must return true so readyState reaches kHaveEnoughData,
-  // which is required for autoplay to trigger via RequestAutoplayByAttribute.
-  if (GetDemuxerType() == media::DemuxerType::kUrlPlayerDemuxer) {
+  if (!base::FeatureList::IsEnabled(media::kSpecCompliantCanPlayThrough)) {
     return true;
   }
+  // Aligned with upstream Chromium: ChunkDemuxer (MSE) and ManifestDemuxer
+  // (HLS) manage their own buffering, so always report can-play-through.
+  switch (GetDemuxerType().value_or(media::DemuxerType::kUnknownDemuxer)) {
+    case media::DemuxerType::kChunkDemuxer:
+    case media::DemuxerType::kManifestDemuxer:
+      return true;
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+    case media::DemuxerType::kUrlPlayerDemuxer:
+      return true;
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
+    default:
+      break;
+  }
   if (demuxer_manager_->DataSourceFullyBuffered()) {
     return true;
   }

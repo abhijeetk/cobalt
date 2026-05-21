@@ -47,6 +47,9 @@ void MojoDemuxerStreamImpl::Initialize(InitializeCallback callback) {
       GetDefaultDecoderBufferConverterCapacity(stream_->type()),
       &remote_consumer_handle);
 
+  LOG(INFO) << "[ABHIJEET][HLS] MojoDemuxerStreamImpl::Initialize"
+            << " type=" << stream_->type()
+            << " mime=" << stream_->mime_type();
   std::move(callback).Run(stream_->type(), std::move(remote_consumer_handle),
 #if BUILDFLAG(USE_STARBOARD_MEDIA)
                           audio_config, video_config, stream_->mime_type());

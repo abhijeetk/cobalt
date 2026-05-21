@@ -695,6 +695,18 @@ void StarboardRenderer::CreatePlayerBridge() {
   const std::string video_mime_type =
       video_stream_ ? video_stream_->mime_type() : "";
 
+  LOG(INFO)
+      << "[ABHIJEET][HLS] StarboardRenderer::CreatePlayerBridge"
+      << " audio_mime=" << audio_mime_type << " video_mime=" << video_mime_type
+      << " audio_codec="
+      << (audio_stream_
+              ? audio_stream_->audio_decoder_config().AsHumanReadableString()
+              : "none")
+      << " video_codec="
+      << (video_stream_
+              ? video_stream_->video_decoder_config().AsHumanReadableString()
+              : "none");
+
   std::string error_message;
 
   DCHECK(!player_bridge_);

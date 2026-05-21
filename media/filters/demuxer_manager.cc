@@ -327,8 +327,15 @@ PipelineStatus DemuxerManager::CreateDemuxer(
   }
 
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
+  LOG(INFO) << "[ABHIJEET][HLS] DemuxerManager::CreateDemuxer"
+            << " hls_fallback=" << hls_fallback_
+            << " kBuiltInHlsPlayer="
+            << base::FeatureList::IsEnabled(kBuiltInHlsPlayer)
+            << " url=" << loaded_url_.spec()
+            << " ends_m3u8=" << loaded_url_.path_piece().ends_with(".m3u8");
   if (hls_fallback_ || (base::FeatureList::IsEnabled(kBuiltInHlsPlayer) &&
                         loaded_url_.path_piece().ends_with(".m3u8"))) {
+    LOG(INFO) << "[ABHIJEET][HLS] Using Chromium HLS demuxer (ManifestDemuxer)";
     std::unique_ptr<Demuxer> demuxer;
     std::tie(data_source_info_, demuxer) = CreateHlsDemuxer();
     SetDemuxer(std::move(demuxer));
@@ -355,9 +362,9 @@ PipelineStatus DemuxerManager::CreateDemuxer(
       if (spec.find("hls_variant") != std::string::npos ||
           spec.find("hls_playlist") != std::string::npos ||
           spec.find(".m3u8") != std::string::npos) {
-        LOG(INFO) << "[URL-ROUTING] DemuxerManager::CreateDemuxer — "
-                  << "creating UrlPlayerDemuxer with URL: "
-                  << loaded_url_.spec();
+        LOG(WARNING) << "[ABHIJEET][HLS] LEAK: Falling through to "
+                     << "UrlPlayerDemuxer path! URL: " << loaded_url_.spec()
+                     << " - HLS demuxer should have caught this above.";
         SetDemuxer(std::make_unique<UrlPlayerDemuxer>(loaded_url_));
       } else {
         LOG(INFO) << "Progressive streams are unsupported.";

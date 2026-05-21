@@ -280,18 +280,22 @@ void StarboardRendererClient::OnDurationChange(base::TimeDelta duration) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   LOG(INFO) << "[Phase3-Play-Pause] StarboardRendererClient::OnDurationChange: "
             << duration;
+#if SB_HAS(PLAYER_WITH_URL)
   if (duration_change_cb_) {
     duration_change_cb_.Run(duration);
   }
+#endif  // SB_HAS(PLAYER_WITH_URL)
 }
 
 void StarboardRendererClient::OnBufferedTimeRangesChange(
     base::TimeDelta start,
     base::TimeDelta length) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+#if SB_HAS(PLAYER_WITH_URL)
   if (buffered_ranges_cb_) {
     buffered_ranges_cb_.Run(start, length);
   }
+#endif  // SB_HAS(PLAYER_WITH_URL)
 }
 
 void StarboardRendererClient::OnEncryptedMediaInitDataEncountered(

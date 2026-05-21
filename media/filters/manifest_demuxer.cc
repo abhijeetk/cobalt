@@ -63,6 +63,12 @@ bool ManifestDemuxer::ManifestDemuxerStream::SupportsConfigChanges() {
   return stream_->SupportsConfigChanges();
 }
 
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+std::string ManifestDemuxer::ManifestDemuxerStream::mime_type() const {
+  return stream_->mime_type();
+}
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
+
 ManifestDemuxer::~ManifestDemuxer() {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   impl_->Stop();

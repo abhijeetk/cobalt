@@ -830,6 +830,28 @@ ChunkDemuxer::Status ChunkDemuxer::AddAutoDetectedCodecsId(
     return kNotSupported;
   }
 
+
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  // Populate id_to_mime_map_ so CreateDemuxerStream can pass a MIME string to
+  // ChunkDemuxerStream. Without this, Starboard's SbPlayer receives an empty
+  // MIME and cannot configure its decoders.
+  switch (mime_type) {
+    case RelaxedParserSupportedType::kMP4:
+      id_to_mime_map_[id] = "video/mp4";
+      break;
+    case RelaxedParserSupportedType::kMP2T:
+      id_to_mime_map_[id] = "video/mp2t";
+      break;
+    case RelaxedParserSupportedType::kAAC:
+      id_to_mime_map_[id] = "audio/aac";
+      break;
+  }
+  LOG(INFO) << "[ABHIJEET][HLS] ChunkDemuxer::AddAutoDetectedCodecsId"
+            << " id=" << id
+            << " relaxed_type=" << static_cast<int>(mime_type)
+            << " mapped_mime=" << id_to_mime_map_[id];
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
+
   return AddIdInternal(id, std::move(stream_parser), std::nullopt);
 }
 #endif
@@ -1660,7 +1682,30 @@ ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
 
 #if BUILDFLAG(USE_STARBOARD_MEDIA)
   auto iter = id_to_mime_map_.find(source_id);
-  std::string mime_type = iter != id_to_mime_map_.end() ? iter->second : "";
+  std::string mime_type = "";
+  if (iter != id_to_mime_map_.end()) {
+    mime_type = iter->second;
+    // Refine MIME type based on stream type.
+    if (type == DemuxerStream::AUDIO) {
+      if (mime_type == "video/mp2t") {
+        mime_type = "audio/mp2t";
+      } else if (mime_type == "video/mp4") {
+        mime_type = "audio/mp4";
+      }
+    } else if (type == DemuxerStream::VIDEO) {
+      if (mime_type == "audio/aac") {
+        // This should not happen for a video stream from an AAC source, but
+        // for completeness:
+        mime_type = "";
+      }
+    }
+  }
+
+  LOG(INFO) << "[ABHIJEET][HLS] ChunkDemuxer::CreateDemuxerStream"
+            << " source_id=" << source_id
+            << " type=" << (type == DemuxerStream::AUDIO ? "AUDIO" : "VIDEO")
+            << " refined_mime_type=" << mime_type
+            << " found_in_map=" << (iter != id_to_mime_map_.end());
   std::unique_ptr<ChunkDemuxerStream> stream =
       std::make_unique<ChunkDemuxerStream>(mime_type, type, media_track_id);
 #else   // BUILDFLAG(USE_STARBOARD_MEDIA)

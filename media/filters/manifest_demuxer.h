@@ -16,6 +16,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
+#include "build/buildflag.h"
 #include "media/base/container_names.h"
 #include "media/base/demuxer.h"
 #include "media/base/demuxer_stream.h"
@@ -266,6 +267,9 @@ class MEDIA_EXPORT ManifestDemuxer : public Demuxer, ManifestDemuxerEngineHost {
     StreamLiveness liveness() const override;
     void EnableBitstreamConverter() override;
     bool SupportsConfigChanges() override;
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+    std::string mime_type() const override;
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
    private:
     WrapperReadCb read_cb_;

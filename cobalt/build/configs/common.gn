@@ -52,8 +52,10 @@ v8_enable_atomic_object_field_writes = false
 # This will force V8 to embed snapshot blob in binary.
 v8_use_external_startup_data = false
 
-# Disable hls_demuxer so that enable_mse_mpeg2ts_stream_parser=false
-enable_hls_demuxer = false
+# Enable HLS demuxer for Chromium's built-in HLS parser and demuxer.
+# This also enables enable_mse_mpeg2ts_stream_parser (required dependency).
+# Needed for the AVSBDL+FairPlay POC (stream-based HLS playback without AVPlayer).
+enable_hls_demuxer = true
 
 # Many of these come from media_options.gni.
 enable_hevc_parser_and_hw_decoder = false

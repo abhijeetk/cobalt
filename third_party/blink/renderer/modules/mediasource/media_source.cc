@@ -72,7 +72,7 @@ namespace blink {
 
 namespace {
 
-#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER) && !BUILDFLAG(USE_STARBOARD_MEDIA)
 
 bool IsMp2tCodecSupported(std::string_view codec_id) {
   if (auto result =
@@ -102,7 +102,7 @@ bool IsMp2tCodecSupported(std::string_view codec_id) {
   return false;
 }
 
-#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER) && !BUILDFLAG(USE_STARBOARD_MEDIA)
 
 }  // namespace
 

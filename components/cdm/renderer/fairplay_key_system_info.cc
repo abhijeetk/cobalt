@@ -105,4 +105,13 @@ EmeFeatureSupport FairplayKeySystemInfo::GetDistinctiveIdentifierSupport()
   return distinctive_identifier_support_;
 }
 
+std::string FairplayKeySystemInfoSBDL::GetBaseKeySystemName() const {
+  return kFairplayKeySystemSbdl;
+}
+
+bool FairplayKeySystemInfoSBDL::IsSupportedKeySystem(
+    const std::string& key_system) const {
+  return key_system == kFairplayKeySystemSbdl;
+}
+
 }  // namespace cdm

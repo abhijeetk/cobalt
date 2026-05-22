@@ -444,6 +444,14 @@ void AddStarboardCmaKeySystems(::media::KeySystemInfos* key_system_infos) {
       kSessionTypes,               // Hardware secure session types.
       ::media::EmeFeatureSupport::ALWAYS_ENABLED,    // Persistent state.
       ::media::EmeFeatureSupport::ALWAYS_ENABLED));  // Distinctive identifier.
+
+  // AVSBDL FairPlay key system. Routes through DrmSystemFairplay (C++ bridge)
+  // instead of SBDApplicationDrmSystem (ObjC, designed for AVPlayer).
+  key_system_infos->emplace_back(new cdm::FairplayKeySystemInfoSBDL(
+      codecs, kFairPlayEncryptionSchemes, kSessionTypes, codecs,
+      kFairPlayEncryptionSchemes, kSessionTypes,
+      ::media::EmeFeatureSupport::ALWAYS_ENABLED,
+      ::media::EmeFeatureSupport::ALWAYS_ENABLED));
 #endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 }
 

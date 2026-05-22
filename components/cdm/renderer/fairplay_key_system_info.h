@@ -69,6 +69,17 @@ class FairplayKeySystemInfo : public media::KeySystemInfo {
   const media::EmeFeatureSupport distinctive_identifier_support_;
 };
 
+// TODO: Consolidate with FairplayKeySystemInfo once URL player path is retired.
+// Only difference is the key system name for AVSBDL routing.
+inline constexpr char kFairplayKeySystemSbdl[] = "com.youtube.fairplay.sbdl";
+
+class FairplayKeySystemInfoSBDL : public FairplayKeySystemInfo {
+ public:
+  using FairplayKeySystemInfo::FairplayKeySystemInfo;
+  std::string GetBaseKeySystemName() const override;
+  bool IsSupportedKeySystem(const std::string& key_system) const override;
+};
+
 }  // namespace cdm
 
 #endif  // COMPONENTS_CDM_RENDERER_FAIRPLAY_KEY_SYSTEM_INFO_H_

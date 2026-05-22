@@ -44,12 +44,22 @@ bool MediaIsKeySystemSupported(SbMediaVideoCodec video_codec,
     return video_codec != kSbMediaVideoCodecVp9;
   }
 
-  // Only encrypted VP9 and AAC are supported.
-  return ::starboard::DrmSystemPlatform::IsKeySystemSupported(key_system) &&
-         (video_codec == kSbMediaVideoCodecNone ||
-          video_codec == kSbMediaVideoCodecVp9) &&
-         (audio_codec == kSbMediaAudioCodecNone ||
-          audio_codec == kSbMediaAudioCodecAac);
+  // AVSBDL FairPlay path: supports H.264, VP9, and AAC.
+  // Originally restricted to VP9-only, but HLS FairPlay streams also use H.264.
+  bool is_platform_supported =
+      ::starboard::DrmSystemPlatform::IsKeySystemSupported(key_system);
+  bool is_video_supported = (video_codec == kSbMediaVideoCodecNone ||
+                             video_codec == kSbMediaVideoCodecVp9 ||
+                             video_codec == kSbMediaVideoCodecH264);
+  bool is_audio_supported = (audio_codec == kSbMediaAudioCodecNone ||
+                             audio_codec == kSbMediaAudioCodecAac);
+  SB_LOG(INFO) << "[ABHIJEET][DRM] MediaIsKeySystemSupported SBDL path:"
+               << " key_system=" << key_system << " video_codec=" << video_codec
+               << " audio_codec=" << audio_codec
+               << " platform=" << is_platform_supported
+               << " video=" << is_video_supported
+               << " audio=" << is_audio_supported;
+  return is_platform_supported && is_video_supported && is_audio_supported;
 }
 
 }  // namespace starboard

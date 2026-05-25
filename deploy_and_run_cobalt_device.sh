@@ -1299,8 +1299,10 @@ if [ "$IS_SIMULATOR" = true ]; then
 else
     # Physical device deployment path
     echo "[1/4] Uninstalling existing Cobalt app (Bundle ID: $BUNDLE_ID)..."
+    set +e
     uninstall_output=$(run_cmd xcrun devicectl device uninstall app --device "$DEVICE" "$BUNDLE_ID" 2>&1)
     uninstall_result=$?
+    set -e
 
     if [ $uninstall_result -eq 0 ]; then
         echo "✓ Successfully uninstalled existing app (Bundle ID: $BUNDLE_ID)"

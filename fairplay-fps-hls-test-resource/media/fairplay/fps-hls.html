@@ -11,13 +11,77 @@
         startTest().then(endTest).catch(failTest);
     });
 
+    function logStep(message) {
+        console.log(message);
+        consoleWrite(message);
+    }
+
+    function logError(prefix, error) {
+        var message = prefix + ' name=' + (error && error.name) + ' message=' + (error && error.message);
+        console.log(message, error);
+        consoleWrite(message);
+        if (error && error.stack)
+            console.log(error.stack);
+    }
+
+    async function buildMediaKeySystemConfiguration(playlistUrl) {
+        var defaultVideoCodec = 'avc1.4D401F';
+        var defaultAudioCodec = 'mp4a.40.2';
+        var playlistText = '';
+
+        try {
+            var playlistResponse = await fetch(playlistUrl);
+            logStep('FETCH: playlist received status=' + playlistResponse.status + ' ok=' + playlistResponse.ok);
+            playlistText = await playlistResponse.text();
+        } catch (error) {
+            logError('WARN: playlist fetch for capability derivation failed', error);
+        }
+
+        var codecs = [];
+        var codecMatch = playlistText.match(/CODECS="([^"]+)"/i);
+        if (codecMatch)
+            codecs = codecMatch[1].split(',').map(codec => codec.trim()).filter(Boolean);
+
+        var videoCodec = codecs.find(codec => codec.indexOf('avc1.') === 0 || codec.indexOf('hvc1.') === 0 || codec.indexOf('hev1.') === 0) || defaultVideoCodec;
+        var audioCodec = codecs.find(codec => codec.indexOf('mp4a.') === 0 || codec.indexOf('ac-3') === 0 || codec.indexOf('ec-3') === 0) || defaultAudioCodec;
+
+        if (codecMatch)
+            logStep('INFO: derived EME codecs from playlist CODECS="' + codecMatch[1] + '"');
+        else
+            logStep('INFO: playlist has no CODECS attribute; using verified fixture codecs from content/main.ts video=' + videoCodec + ' audio=' + audioCodec);
+
+        return {
+            initDataTypes: ['fairplay', 'skd', 'sinf', 'cenc'],
+            videoCapabilities: [{
+                contentType: 'video/mp4; codecs="' + videoCodec + '"',
+                encryptionScheme: 'cbcs',
+                robustness: '',
+            }],
+            audioCapabilities: [{
+                contentType: 'audio/mp4; codecs="' + audioCodec + '"',
+                encryptionScheme: 'cbcs',
+                robustness: '',
+            }],
+            distinctiveIdentifier: 'optional',
+            persistentState: 'optional',
+            sessionTypes: ['temporary'],
+        };
+    }
+
     async function startTest() {
         var video = document.querySelector('video');
-        video.src = 'content/prog_index.m3u8';
+        video.addEventListener('error', event => {
+            var mediaError = video.error;
+            logStep('EVENT(video.error) code=' + (mediaError && mediaError.code) + ' message=' + (mediaError && mediaError.message));
+        });
+
+        logStep('START: fps-hls standalone FairPlay test');
+        var playlistUrl = 'content/prog_index.m3u8';
+        video.src = playlistUrl;
         event = await waitFor(video, 'encrypted');
 
         if (event.initDataType !== 'skd') {
-            consoleWrite('FAIL: expected event.initDataType === "skd", got ' + event.initDataType);
+            logStep('FAIL: expected event.initDataType === "skd", got ' + event.initDataType);
             endTest();
             return;
         }
@@ -25,44 +89,73 @@
         var initData = event.initData;
         var keyURI = uInt8ArrayToString(new Uint8Array(initData));
         var video = event.target;
-        var access = await navigator.requestMediaKeySystemAccess("com.apple.fps", [{
-            initDataTypes: ['skd'],
-            videoCapabilities: [{ contentType: 'application/vnd.apple.mpegurl', robustness: '' }],
-            distinctiveIdentifier: 'not-allowed',
-            persistentState: 'not-allowed',
-            sessionTypes: ['temporary'],
-        }]);
+        // Try multiple key systems for cross-platform compatibility:
+        // - com.apple.fps: Safari/WebKit native
+        // - com.youtube.fairplay.sbdl: Cobalt AVSBDL path (DrmSystemFairplay)
+        // - com.youtube.fairplay: Cobalt URL player path
+        var keySystems = ["com.apple.fps", "com.youtube.fairplay.sbdl", "com.youtube.fairplay"];
+        var mediaKeySystemConfiguration = await buildMediaKeySystemConfiguration(playlistUrl);
 
-        consoleWrite('PROMISE: requestMediaKeySystemAccess resolved');
+        logStep('EVENT(encrypted) initDataType=' + event.initDataType + ' initDataBytes=' + initData.byteLength + ' keyURI=' + keyURI);
+        logStep('CHECK: typeof navigator.requestMediaKeySystemAccess=' + typeof navigator.requestMediaKeySystemAccess);
+
+        var access;
+        for (var keySystem of keySystems) {
+            try {
+                logStep('CALL: requestMediaKeySystemAccess keySystem=' + keySystem);
+                access = await navigator.requestMediaKeySystemAccess(keySystem, [mediaKeySystemConfiguration]);
+                logStep('PROMISE: requestMediaKeySystemAccess resolved keySystem=' + access.keySystem);
+                break;
+            } catch (error) {
+                logStep('INFO: keySystem "' + keySystem + '" not supported: ' + (error && error.message));
+            }
+        }
+        if (!access) {
+            logError('FAIL: no supported FairPlay key system found', new Error('No key system'));
+            throw new Error('No supported FairPlay key system');
+        }
+        if (access.getConfiguration)
+            logStep('INFO: selected configuration=' + JSON.stringify(access.getConfiguration()));
+
         var keys = await access.createMediaKeys();
-
-        consoleWrite('PROMISE: createMediaKeys resolved');
+        logStep('PROMISE: createMediaKeys resolved');
         var certificateResponse = await fetch('resources/cert.der');
 
-        consoleWrite('FETCH: server certificate received');
+        logStep('FETCH: server certificate received status=' + certificateResponse.status + ' ok=' + certificateResponse.ok);
         var arrayBuffer = await certificateResponse.arrayBuffer();
 
-        consoleWrite('PROMISE: arrayBuffer resolved');
+        logStep('PROMISE: certificate arrayBuffer resolved bytes=' + arrayBuffer.byteLength);
         await keys.setServerCertificate(arrayBuffer);
 
-        consoleWrite('PROMISE: setServerCertificate resolved');
+        logStep('PROMISE: setServerCertificate resolved');
         var session = keys.createSession();
+        session.addEventListener('keystatuseschange', event => {
+            logStep('EVENT(keystatuseschange) size=' + session.keyStatuses.size);
+        });
+        session.addEventListener('message', event => {
+            logStep('EVENT(message-debug) messageType=' + event.messageType + ' bytes=' + event.message.byteLength);
+        });
 
-        session.generateRequest('skd', initData);
+        logStep('CALL: session.generateRequest initDataType=skd bytes=' + initData.byteLength);
+        await session.generateRequest('skd', initData);
+        logStep('PROMISE: session.generateRequest resolved');
         let message = await waitFor(session, 'message');
 
         let response = await getResponse(message);
+        logStep('FETCH: CKC response decoded bytes=' + response.byteLength);
         await session.update(response);
 
-        consoleWrite('PROMISE: session.update() resolved');
+        logStep('PROMISE: session.update() resolved');
 
-        video.setMediaKeys(keys);
+        await video.setMediaKeys(keys);
+        logStep('PROMISE: video.setMediaKeys resolved');
 
         await waitFor(video, 'canplay');
+        logStep('EVENT(canplay) reached');
     }
     </script>
 </head>
 <body>
-    <video controls width="480"></video>
+    <video controls autoplay muted width="480"></video>
 </body>
 </html>

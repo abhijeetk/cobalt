@@ -44,6 +44,22 @@ class FairPlayTestHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(content_length)
 
+        # Diagnostic: log request details for Safari vs Cobalt comparison
+        user_agent = self.headers.get("User-Agent", "unknown")
+        print(f"[FPS-SERVER] === License request ===")
+        print(f"[FPS-SERVER] User-Agent: {user_agent[:80]}")
+        print(f"[FPS-SERVER] Content-Length: {content_length}")
+        print(f"[FPS-SERVER] Body prefix (hex): {body[:64].hex()}")
+        try:
+            import json as _json
+            req = _json.loads(body)
+            keys = req.get("fairplay-streaming-request", {}).get("streaming-keys", [])
+            for k in keys:
+                spc_b64 = k.get("spc", "")
+                print(f"[FPS-SERVER] uri={k.get('uri')} spc_b64_len={len(spc_b64)}")
+        except Exception:
+            print(f"[FPS-SERVER] (could not parse JSON body)")
+
         env = os.environ.copy()
         env[AUTOINSTALL_DISABLE_ENV] = "1"
         env["PYTHONPATH"] = str(KEYSERVER_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
@@ -66,6 +82,20 @@ class FairPlayTestHandler(BaseHTTPRequestHandler):
         status, headers, response_body = self._parse_cgi_response(completed.stdout)
         if completed.returncode and status == HTTPStatus.OK:
             status = HTTPStatus.INTERNAL_SERVER_ERROR
+
+        # Diagnostic: log response details
+        print(f"[FPS-SERVER] Response status={status} body_len={len(response_body)}")
+        print(f"[FPS-SERVER] Response prefix (hex): {response_body[:64].hex()}")
+        try:
+            resp = _json.loads(response_body)
+            keys = resp.get("fairplay-streaming-response", {}).get("streaming-keys", [])
+            for k in keys:
+                ckc_b64 = k.get("ckc", "")
+                import base64
+                ckc_bytes = base64.b64decode(ckc_b64)
+                print(f"[FPS-SERVER] CKC b64_len={len(ckc_b64)} raw_len={len(ckc_bytes)} prefix={ckc_bytes[:16].hex()}")
+        except Exception as e:
+            print(f"[FPS-SERVER] (could not parse response: {e})")
 
         self.send_response(status)
         for name, value in headers:

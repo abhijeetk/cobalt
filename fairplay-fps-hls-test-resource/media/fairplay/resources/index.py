@@ -114,6 +114,13 @@ for streamingKey in streamingKeys:
     if len(spcData) == 0:
         badRequest("spcData is empty")
 
+    # Server-side diagnostic logging
+    sys.stderr.write("[FPS-SERVER] === New license request ===\n")
+    sys.stderr.write("[FPS-SERVER] uri={}\n".format(uri))
+    sys.stderr.write("[FPS-SERVER] assetId={}\n".format(assetId))
+    sys.stderr.write("[FPS-SERVER] spc_size={} spc_prefix={}\n".format(
+        len(spcData), spcData[:32].hex()))
+
     try:
         spcContainer = SPCContainer.parse(spcData)
 

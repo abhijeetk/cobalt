@@ -109,6 +109,13 @@ class MEDIA_EXPORT ManifestDemuxerEngineHost {
   // This allows the HLS engine to trigger EME key exchange for DRM content.
   virtual void OnEncryptedMediaInitData(EmeInitDataType type,
                                         const std::vector<uint8_t>& data) = 0;
+
+  // Bridge HLS EXT-X-KEY SAMPLE-AES encryption metadata into the TS parser.
+  // Called by the HLS engine before appending encrypted segment data.
+  virtual void SetEncryptionInfo(std::string_view role,
+                                 EncryptionScheme scheme,
+                                 const std::string& key_id,
+                                 const std::string& iv) = 0;
 };
 
 // A Demuxer designed to allow implementation of media demuxers which don't
@@ -247,6 +254,10 @@ class MEDIA_EXPORT ManifestDemuxer : public Demuxer, ManifestDemuxerEngineHost {
   void UnsetEndOfStream() override;
   void OnEncryptedMediaInitData(EmeInitDataType type,
                                 const std::vector<uint8_t>& data) override;
+  void SetEncryptionInfo(std::string_view role,
+                         EncryptionScheme scheme,
+                         const std::string& key_id,
+                         const std::string& iv) override;
 
   // Allow unit tests to grab the chunk demuxer.
   ChunkDemuxer* GetChunkDemuxerForTesting();

@@ -489,6 +489,20 @@ ChunkDemuxer* ManifestDemuxer::GetChunkDemuxerForTesting() {
   return chunk_demuxer_.get();
 }
 
+void ManifestDemuxer::SetEncryptionInfo(std::string_view role,
+                                        EncryptionScheme scheme,
+                                        const std::string& key_id,
+                                        const std::string& iv) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  LOG(INFO) << "[ABHIJEET][HLS] ManifestDemuxer::SetEncryptionInfo"
+            << " role=" << role
+            << " scheme=" << static_cast<int>(scheme);
+  CHECK(chunk_demuxer_);
+#if BUILDFLAG(ENABLE_HLS_DEMUXER)
+  chunk_demuxer_->SetEncryptionInfo(std::string(role), scheme, key_id, iv);
+#endif
+}
+
 void ManifestDemuxer::OnChunkDemuxerOpened() {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   demuxer_opened_ = true;

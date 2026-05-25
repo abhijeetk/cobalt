@@ -17,6 +17,9 @@
 #include "base/task/bind_post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/audio_decoder_config.h"
+#if BUILDFLAG(ENABLE_HLS_DEMUXER)
+#include "media/formats/mp2t/mp2t_stream_parser.h"
+#endif  // BUILDFLAG(ENABLE_HLS_DEMUXER)
 #include "media/base/demuxer.h"
 #include "media/base/media_tracks.h"
 #include "media/base/mime_util.h"
@@ -853,6 +856,44 @@ ChunkDemuxer::Status ChunkDemuxer::AddAutoDetectedCodecsId(
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
   return AddIdInternal(id, std::move(stream_parser), std::nullopt);
+}
+
+void ChunkDemuxer::SetEncryptionInfo(const std::string& id,
+                                     EncryptionScheme scheme,
+                                     const std::string& key_id,
+                                     const std::string& iv) {
+  base::AutoLock auto_lock(lock_);
+  LOG(INFO) << "[ABHIJEET][HLS] ChunkDemuxer::SetEncryptionInfo"
+            << " id=" << id
+            << " scheme=" << static_cast<int>(scheme)
+            << " key_id_size=" << key_id.size()
+            << " iv_size=" << iv.size();
+
+  auto itr = source_state_map_.find(id);
+  if (itr == source_state_map_.end()) {
+    LOG(WARNING) << "[ABHIJEET][HLS] SetEncryptionInfo: source_id not found: "
+                 << id;
+    return;
+  }
+
+  // Check if this source ID uses an MP2T parser by checking the mime map.
+  // We can't use dynamic_cast because RTTI is disabled.
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
+  auto mime_itr = id_to_mime_map_.find(id);
+  bool is_mp2t = (mime_itr != id_to_mime_map_.end() &&
+                  (mime_itr->second == "video/mp2t" ||
+                   mime_itr->second == "audio/mp2t"));
+#else
+  bool is_mp2t = false;
+#endif
+  if (is_mp2t) {
+    auto* mp2t_parser = static_cast<mp2t::Mp2tStreamParser*>(
+        itr->second->stream_parser());
+    mp2t_parser->SetHlsSampleAesEncryption(scheme, key_id, iv);
+  } else {
+    LOG(WARNING) << "[ABHIJEET][HLS] SetEncryptionInfo: source is not MP2T"
+                 << ", skipping";
+  }
 }
 #endif
 

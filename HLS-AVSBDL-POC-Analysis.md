@@ -4,6 +4,12 @@
 *May 2026*
 
 > **Scope**: This document covers **only** the stream-based path: Chromium's built-in HLS demuxer (`HlsManifestDemuxerEngine`) feeding encrypted samples to Starboard's `AVSampleBufferDisplayLayer` (AVSBDL) with FairPlay DRM. This is **not** about the AVPlayer/UrlPlayer path. The UrlPlayer (AVPlayer) path is referenced only for comparison. For UrlPlayer documentation, see `Phase-1.md`, `Phase-2-FairPlay-DRM-Design-Doc.md`, and `EncryptedEventForwarding-Architecture.md`.
+>
+> **Related documents:**
+> - [HLS Demuxer Modifications](HLS-Demuxer-Modifications.md) -- Demuxer/parser changes for clear + encrypted HLS
+> - [HLS Demuxer Design Doc](HLS-Demuxer-Design-Doc.md) -- Complete design doc for reviewer
+> - [AVContentKeySession Investigation](AVContentKeySession-Investigation.md) -- Remaining blocker: manual FairPlay key request for AVSBDL path
+> - [FairPlay Handshake Debug Log](FairPlay-Handshake-Debug-Log.md) -- Physical-device handshake runs, tested content identifiers, CKC shapes, and current errors
 
 ## 1. Executive Summary
 

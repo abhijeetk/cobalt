@@ -311,6 +311,16 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
                              const std::string& mime_type);
 #endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
+#if BUILDFLAG(ENABLE_HLS_DEMUXER)
+  // Bridge HLS EXT-X-KEY SAMPLE-AES metadata into the TS parser for a
+  // given source ID. Must be called after AddAutoDetectedCodecsId and
+  // before appending encrypted segment data.
+  void SetEncryptionInfo(const std::string& id,
+                         EncryptionScheme scheme,
+                         const std::string& key_id,
+                         const std::string& iv);
+#endif  // BUILDFLAG(ENABLE_HLS_DEMUXER)
+
   // Notifies a caller via `tracks_updated_cb` that the set of media tracks
   // for a given `id` has changed. This callback must be set before any calls to
   // AppendToParseBuffer() for this `id`.

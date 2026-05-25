@@ -1014,6 +1014,20 @@ void Mp2tStreamParser::RegisterNewKeyIdAndIv(const std::string& key_id,
   }
 }
 
+void Mp2tStreamParser::SetHlsSampleAesEncryption(
+    EncryptionScheme scheme,
+    const std::string& key_id,
+    const std::string& iv) {
+  LOG(INFO) << "[ABHIJEET][HLS] Mp2tStreamParser::SetHlsSampleAesEncryption"
+            << " scheme=" << static_cast<int>(scheme)
+            << " key_id_size=" << key_id.size()
+            << " iv_size=" << iv.size();
+  RegisterEncryptionScheme(scheme);
+  if (!key_id.empty() && !iv.empty()) {
+    RegisterNewKeyIdAndIv(key_id, iv);
+  }
+}
+
 void Mp2tStreamParser::RegisterPsshBoxes(
     const std::vector<uint8_t>& init_data) {
   encrypted_media_init_data_cb_.Run(EmeInitDataType::CENC, init_data);

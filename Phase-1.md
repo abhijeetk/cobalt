@@ -7,9 +7,10 @@
 
 ### **Summary**
 This document describes how we can delegate HLS playback to the native `AVPlayer` on tvOS, for high performance and low power consumption.
-We divide this work into two phases:
+We divide this work into three phases:
 - Phase 1: Enable HLS playback on tvOS (clear, non-protected content)
-- Phase 2: Enable protected HLS playback on tvOS (FairPlay DRM)
+- Phase 2: [Enable protected HLS playback on tvOS (FairPlay DRM)](Phase-2-FairPlay-DRM-Design-Doc.md)
+- Phase 3: [Media Control & Pipeline Integration](Phase-3-Media-Control-Design.md) (State synchronization and command mapping)
 
 This document covers Phase 1.
 

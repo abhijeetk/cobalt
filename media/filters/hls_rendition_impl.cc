@@ -11,6 +11,7 @@
 
 #include "base/task/bind_post_task.h"
 #include "base/trace_event/trace_event.h"
+#include "media/base/encryption_scheme.h"
 #include "media/filters/hls_manifest_demuxer_engine.h"
 
 namespace media {
@@ -473,6 +474,80 @@ void HlsRenditionImpl::OnSegmentData(scoped_refptr<hls::MediaSegment> segment,
         if (plaintext.size() == 0) {
           FetchNext(std::move(cb), required_time);
           return;
+        }
+        break;
+      }
+      case hls::XKeyTagMethod::kSampleAES:
+      case hls::XKeyTagMethod::kSampleAESCTR:
+      case hls::XKeyTagMethod::kSampleAESCENC: {
+        // SAMPLE-AES: do NOT decrypt in software. Hardware (AVSBDL/FairPlay)
+        // handles decryption. Instead, bridge the encryption metadata into
+        // the TS parser so it creates encrypted ES parsers and attaches
+        // DecryptConfig to DecoderBuffers.
+        std::string key_id_str;
+        std::string iv_str;
+
+        // Extract key ID from the URI.
+        const std::string uri_spec =
+            enc_data->GetUri().possibly_invalid_spec();
+        if (uri_spec.find("skd://") == 0) {
+          std::string remainder = uri_spec.substr(6);
+          auto colon_pos = remainder.find(':');
+          std::string uuid_str = (colon_pos != std::string::npos)
+              ? remainder.substr(0, colon_pos) : remainder;
+
+          // Try to parse as UUID (32 hex chars with hyphens)
+          std::string hex;
+          for (char c : uuid_str) {
+            if (c != '-') hex += c;
+          }
+          if (hex.size() == 32) {
+            // Standard UUID: convert to 16 raw bytes
+            key_id_str.resize(16);
+            for (size_t i = 0; i < 16; ++i) {
+              key_id_str[i] = static_cast<char>(
+                  std::stoi(hex.substr(i * 2, 2), nullptr, 16));
+            }
+          } else {
+            // Non-UUID key ID (e.g., WebKit fixture "twelve"):
+            // use raw UTF-8 bytes as key ID.
+            key_id_str = remainder;
+            if (colon_pos != std::string::npos) {
+              key_id_str = uuid_str;
+            }
+          }
+        }
+
+        // Get IV from EXT-X-KEY. If no IV attribute, derive from media
+        // sequence number per HLS spec section 5.2.
+        auto maybe_iv = enc_data->GetIVStr(segment->GetMediaSequenceNumber());
+        if (maybe_iv.has_value() && !maybe_iv->empty()) {
+          iv_str = *maybe_iv;
+        } else {
+          // Derive IV from media sequence number (16-byte big-endian)
+          uint64_t seq = segment->GetMediaSequenceNumber();
+          iv_str.resize(16, '\0');
+          for (int i = 15; i >= 8; --i) {
+            iv_str[i] = static_cast<char>(seq & 0xFF);
+            seq >>= 8;
+          }
+          LOG(INFO) << "[ABHIJEET][HLS] Derived IV from media sequence "
+                    << segment->GetMediaSequenceNumber();
+        }
+
+        if (!key_id_str.empty() && !iv_str.empty()) {
+          LOG(INFO) << "[ABHIJEET][HLS] Bridging SAMPLE-AES metadata to parser"
+                    << " role=" << role_
+                    << " key_id_size=" << key_id_str.size()
+                    << " iv_size=" << iv_str.size()
+                    << " uri=" << uri_spec;
+          engine_host_->SetEncryptionInfo(
+              role_, EncryptionScheme::kCbcs, key_id_str, iv_str);
+        } else {
+          LOG(WARNING) << "[ABHIJEET][HLS] SAMPLE-AES metadata incomplete"
+                       << " key_id_empty=" << key_id_str.empty()
+                       << " iv_empty=" << iv_str.empty()
+                       << " uri=" << uri_spec;
         }
         break;
       }

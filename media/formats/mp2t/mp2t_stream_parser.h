@@ -60,6 +60,23 @@ class MEDIA_EXPORT Mp2tStreamParser : public StreamParser {
       base::span<const uint8_t> buf) override;
   [[nodiscard]] ParseStatus Parse(int max_pending_bytes_to_inspect) override;
 
+  // Bridge HLS EXT-X-KEY SAMPLE-AES metadata into the TS parser.
+  // Must be called before Init() or before first Parse().
+  // This is needed because HLS SAMPLE-AES signals encryption in the manifest,
+  // not in the TS container (no CAT/ECM tables). Without this bridge,
+  // the parser creates unencrypted ES parsers and emits samples without
+  // DecryptConfig.
+  //
+  // Alternative approaches not taken:
+  // - Option A: Use Apple's AVStreamDataParser which natively detects
+  //   SAMPLE-AES from TS PMT descriptors. This is what WebKit does but
+  //   requires a new Starboard component.
+  // - Option C: Hybrid approach using AVStreamDataParser only for
+  //   CMFormatDescription creation while keeping this parser for frames.
+  void SetHlsSampleAesEncryption(EncryptionScheme scheme,
+                                 const std::string& key_id,
+                                 const std::string& iv);
+
  private:
   struct BufferQueueWithConfig {
     BufferQueueWithConfig(bool is_cfg_sent,

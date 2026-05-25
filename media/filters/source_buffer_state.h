@@ -131,6 +131,9 @@ class MEDIA_EXPORT SourceBufferState {
     return stream_parser_->GetGenerateTimestampsFlag();
   }
 
+  // Returns the underlying StreamParser for type-specific operations.
+  StreamParser* stream_parser() const { return stream_parser_.get(); }
+
   // Sets |frame_processor_|'s sequence mode to |sequence_mode|.
   void SetSequenceMode(bool sequence_mode);
 

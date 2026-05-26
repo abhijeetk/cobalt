@@ -18,6 +18,13 @@
 #include "starboard/tvos/shared/media/avutil/utils.h"
 #include "starboard/tvos/shared/media/playback_capabilities.h"
 
+// Declare AVSampleBufferAudioRenderer as AVContentKeyRecipient so we can
+// register it with the AVContentKeySession. Required for
+// AVSampleBufferAttachContentKey on manually-built CMSampleBuffers.
+@interface AVSampleBufferAudioRenderer (CobaltKeySession) <
+    AVContentKeyRecipient>
+@end
+
 static NSString* kAVSBARStatusKeyPath = @"status";
 
 namespace starboard {
@@ -70,6 +77,20 @@ AVSBAudioRenderer::AVSBAudioRenderer(JobQueue* job_queue,
   @autoreleasepool {
     audio_renderer_ = [[AVSampleBufferAudioRenderer alloc] init];
 
+    // Register audio renderer as content key recipient BEFORE any samples
+    // are enqueued. Required for AVSampleBufferAttachContentKey (-12161
+    // without).
+    if (drm_system_) {
+      AVContentKeySession* keySession = drm_system_->GetContentKeySession();
+      if (keySession) {
+        [keySession addContentKeyRecipient:audio_renderer_];
+        content_key_recipient_registered_ = true;
+        SB_LOG(INFO) << "[ABHIJEET][DRM] Audio: addContentKeyRecipient on "
+                        "AVSampleBufferAudioRenderer";
+        drm_system_->OnHardwareRecipientAdded();
+      }
+    }
+
     ObserverRegistry::RegisterObserver(&observer_);
     status_observer_ = avutil::CreateKVOProxyObserver(std::bind(
         &AVSBAudioRenderer::OnStatusChanged, this, std::placeholders::_1));
@@ -92,6 +113,12 @@ AVSBAudioRenderer::~AVSBAudioRenderer() {
   SB_DCHECK(BelongsToCurrentThread());
 
   @autoreleasepool {
+    if (drm_system_) {
+      AVContentKeySession* keySession = drm_system_->GetContentKeySession();
+      if (keySession) {
+        [keySession removeContentKeyRecipient:audio_renderer_];
+      }
+    }
     [audio_renderer_ removeObserver:status_observer_
                          forKeyPath:kAVSBARStatusKeyPath];
   }  // @autoreleasepool
@@ -182,28 +209,40 @@ void AVSBAudioRenderer::WriteSamples(const InputBuffers& input_buffers) {
     CFMutableDictionaryRef attachment =
         (CFMutableDictionaryRef)CFArrayGetValueAtIndex(attachments, 0);
 
-    // Attach content key and cryptor data to sample buffer.
-    AVContentKey* content_key = drm_system_->GetContentKey(
-        drm_info->identifier, drm_info->identifier_size);
-    SB_DCHECK(content_key);
+    SB_LOG(INFO) << "[ABHIJEET][DRM] Audio encrypted sample: key_id_size="
+                 << drm_info->identifier_size
+                 << " subsample_count=" << drm_info->subsample_count
+                 << " recipient_registered="
+                 << content_key_recipient_registered_;
 
-    NSError* error;
-    BOOL result =
-        AVSampleBufferAttachContentKey(sample_buffer, content_key, &error);
-    if (!result) {
-      std::stringstream ss;
-      ss << "Failed to attach content key.";
-      avutil::AppendAVErrorDetails(error, &ss);
-      ReportError(ss.str());
-      return;
+    // When addContentKeyRecipient was called on the audio renderer, the key
+    // session handles decryption automatically - skip per-sample
+    // AVSampleBufferAttachContentKey (WebKit PR #21770 pattern).
+    if (!content_key_recipient_registered_) {
+      AVContentKey* content_key = drm_system_->GetContentKey(
+          drm_info->identifier, drm_info->identifier_size);
+      SB_DCHECK(content_key);
+
+      NSError* error;
+      BOOL result =
+          AVSampleBufferAttachContentKey(sample_buffer, content_key, &error);
+      if (!result) {
+        std::stringstream ss;
+        ss << "Failed to attach content key.";
+        avutil::AppendAVErrorDetails(error, &ss);
+        ReportError(ss.str());
+        return;
+      }
     }
 
+    // Always attach cryptor subsample data so the renderer knows which parts
+    // of the sample buffer are encrypted.
+    static NSString* kCMSampleAttachmentKey_CryptorSubsampleAuxiliaryData =
+        @"CryptorSubsampleAuxiliaryData";
     CFDataRef cryptor_info = CFDataCreate(
         NULL,
         reinterpret_cast<const unsigned char*>(drm_info->subsample_mapping),
         drm_info->subsample_count * sizeof(SbDrmSubSampleMapping));
-    static NSString* kCMSampleAttachmentKey_CryptorSubsampleAuxiliaryData =
-        @"CryptorSubsampleAuxiliaryData";
     CFDictionarySetValue(
         attachment,
         (__bridge CFStringRef)

@@ -20,6 +20,22 @@
 #import "starboard/tvos/shared/media/drm_manager.h"
 #import "starboard/tvos/shared/starboard_application.h"
 
+static NSString* SBDHexPrefix(NSData* data, NSUInteger maxBytes) {
+  if (!data) {
+    return @"<nil>";
+  }
+  const uint8_t* bytes = static_cast<const uint8_t*>(data.bytes);
+  NSUInteger length = MIN(data.length, maxBytes);
+  NSMutableString* result = [NSMutableString stringWithCapacity:length * 2];
+  for (NSUInteger i = 0; i < length; ++i) {
+    [result appendFormat:@"%02x", bytes[i]];
+  }
+  if (data.length > maxBytes) {
+    [result appendString:@"..."];
+  }
+  return result;
+}
+
 @interface SBDKeyPrefetchData : NSObject
 @property(readonly) NSData* certificationData;
 @property(readonly) NSData* contentIdentifier;
@@ -178,15 +194,54 @@
         (unsigned long)_keyRequestsPendingUpdateRequest.count);
 
   if (!keyRequest) {
-    NSLog(@"[ABHIJEET][FPS-FLOW]   ERROR: no pending key request for"
-          @" identifier '%@'",
+    NSLog(@"[ABHIJEET][FPS-FLOW]   No pending key request for identifier '%@'."
+          @" Manually triggering AVContentKeySession (AVSBDL path).",
           requestIdentifier);
-    // Log all pending identifiers for debugging
-    @synchronized(self) {
-      for (NSString* key in _keyRequestsPendingUpdateRequest) {
-        NSLog(@"[ABHIJEET][FPS-FLOW]     pending identifier: '%@'", key);
-      }
+
+    // AVSBDL path: no AVPlayer, so AVContentKeySession was never triggered
+    // automatically. Create the session if needed and manually request a key,
+    // following the same pattern as the "fairplay" prefetch path.
+
+    // Ensure AVContentKeySession exists
+    if (!self.keySession) {
+      NSLog(@"[ABHIJEET][FPS-FLOW]   Creating AVContentKeySession for AVSBDL");
+      self.keySession = [AVContentKeySession
+          contentKeySessionWithKeySystem:AVContentKeySystemFairPlayStreaming];
+      [self.keySession setDelegate:self
+                             queue:dispatch_queue_create(
+                                       "com.cobalt.fairplay.keysession", NULL)];
     }
+
+    // Get server certificate
+    NSData* certData;
+    @synchronized(self) {
+      certData = _serverCertificate;
+    }
+    if (!certData) {
+      NSLog(@"[ABHIJEET][FPS-FLOW]   ERROR: no server certificate for AVSBDL"
+            @" key request. Was setServerCertificate() called?");
+      return;
+    }
+
+    // Store prefetch data so processKeyRequest: can fulfill it when the
+    // delegate fires contentKeySession:didProvideContentKeyRequest:
+    NSData* contentIdentifier =
+        [requestIdentifier dataUsingEncoding:NSUTF8StringEncoding];
+    SBDKeyPrefetchData* prefetchData =
+        [[SBDKeyPrefetchData alloc] initWithCertificationData:certData
+                                            contentIdentifier:contentIdentifier
+                                                     initData:initData
+                                                       ticket:ticket];
+    @synchronized(self) {
+      _keyPrefetchData[requestIdentifier] = prefetchData;
+    }
+
+    NSLog(@"[ABHIJEET][FPS-FLOW]   Calling processContentKeyRequestWith"
+          @"Identifier: '%@'",
+          requestIdentifier);
+    [self.keySession processContentKeyRequestWithIdentifier:requestIdentifier
+                                         initializationData:nil
+                                                    options:nil];
     return;
   }
 
@@ -232,15 +287,29 @@
 - (void)updateSessionWithKey:(NSData*)key
                       ticket:(NSInteger)ticket
                    sessionId:(NSData*)sessionId {
+  NSLog(@"[ABHIJEET][FPS-FLOW] updateSessionWithKey: keySize=%lu ticket=%ld"
+        @" sessionIdSize=%lu keyHex=%@",
+        (unsigned long)key.length, (long)ticket,
+        (unsigned long)sessionId.length, SBDHexPrefix(key, 64));
+
   AVContentKeyRequest* keyRequest;
   @synchronized(self) {
     keyRequest = _keyRequestsPendingKey[sessionId];
     [_keyRequestsPendingKey removeObjectForKey:sessionId];
   }
 
+  NSLog(@"[ABHIJEET][FPS-FLOW]   keyRequest=%@ identifier='%@'",
+        keyRequest ? @"FOUND" : @"NOT FOUND",
+        keyRequest ? keyRequest.identifier : @"n/a");
+
   AVContentKeyResponse* keyResponse = [AVContentKeyResponse
       contentKeyResponseWithFairPlayStreamingKeyResponseData:key];
+  NSLog(@"[ABHIJEET][FPS-FLOW]   Calling processContentKeyResponse"
+        @" (CKC -> AVContentKeyRequest)");
   [keyRequest processContentKeyResponse:keyResponse];
+  NSLog(@"[ABHIJEET][FPS-FLOW]   processContentKeyResponse returned,"
+        @" contentKey=%@",
+        keyRequest.contentKey ? @"present" : @"nil");
 
   SBDDrmManager* drmManager = SBDGetApplication().drmManager;
   SbDrmSystem starboardDrmSystem =
@@ -256,6 +325,13 @@
          contentIdentifier:(NSData*)contentIdentifier
                   initData:(NSData*)initData
                     ticket:(NSInteger)ticket {
+  NSLog(@"[ABHIJEET][FPS-FLOW] makeKeyRequestData:"
+        @" identifier='%@' certLen=%lu contentIdentifierLen=%lu"
+        @" contentIdentifierHex=%@ initDataLen=%lu ticket=%ld",
+        keyRequest.identifier, (unsigned long)certificationData.length,
+        (unsigned long)contentIdentifier.length,
+        SBDHexPrefix(contentIdentifier, 80), (unsigned long)initData.length,
+        (long)ticket);
   [keyRequest
       makeStreamingContentKeyRequestDataForApp:certificationData
                              contentIdentifier:contentIdentifier
@@ -268,6 +344,11 @@
                                      processContentKeyResponseError:error];
                                  return;
                                }
+                               NSLog(
+                                   @"[ABHIJEET][FPS-FLOW] makeKeyRequestData"
+                                   @" completed: spcLen=%lu spcHex=%@",
+                                   (unsigned long)contentKeyRequestData.length,
+                                   SBDHexPrefix(contentKeyRequestData, 64));
                                [self streamingContentKeyRequest:keyRequest
                                               completedWithData:
                                                   contentKeyRequestData
@@ -362,6 +443,41 @@
     _keyRequestsPendingUpdateRequest[keyRequest.identifier] = keyRequest;
     return YES;
   }
+}
+
+#pragma mark - AVContentKeySessionDelegate (AVSBDL path)
+
+- (void)contentKeySession:(AVContentKeySession*)session
+    didProvideContentKeyRequest:(AVContentKeyRequest*)keyRequest {
+  NSLog(@"[ABHIJEET][FPS-FLOW] SBDApplicationDrmSystem"
+        @" didProvideContentKeyRequest: identifier='%@'",
+        keyRequest.identifier);
+  [self processKeyRequest:keyRequest];
+}
+
+- (nullable AVContentKey*)contentKeyForIdentifier:(const uint8_t*)key_id
+                                      key_id_size:(int)key_id_size {
+  // Not used for the SBDApplicationDrmSystem path (URL player).
+  // DrmSystemFairplay has its own content key storage.
+  NSLog(@"[ABHIJEET][FPS-FLOW] SBDApplicationDrmSystem contentKeyForIdentifier"
+        @" (not implemented for URL player path)");
+  return nil;
+}
+
+- (void)contentKeySession:(AVContentKeySession*)session
+    didProvideRenewingContentKeyRequest:(AVContentKeyRequest*)keyRequest {
+  NSLog(@"[ABHIJEET][FPS-FLOW] SBDApplicationDrmSystem"
+        @" didProvideRenewingContentKeyRequest: identifier='%@'",
+        keyRequest.identifier);
+  [self processKeyRequest:keyRequest];
+}
+
+- (void)contentKeySession:(AVContentKeySession*)session
+        contentKeyRequest:(AVContentKeyRequest*)keyRequest
+         didFailWithError:(NSError*)err {
+  NSLog(@"[ABHIJEET][FPS-FLOW] SBDApplicationDrmSystem"
+        @" contentKeyRequest didFailWithError: %@",
+        err);
 }
 
 @end

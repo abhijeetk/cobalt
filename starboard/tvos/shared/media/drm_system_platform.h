@@ -60,6 +60,13 @@ class DrmSystemPlatform : public SbDrmSystemPrivate {
   virtual AVContentKey* GetContentKey(const uint8_t* key_id, int key_id_size)
       API_AVAILABLE(tvos(14.5)) = 0;
   virtual void OnOutputObscuredChanged(bool is_obscured) = 0;
+  virtual AVContentKeySession* GetContentKeySession()
+      API_AVAILABLE(tvos(10.2)) {
+    return nil;
+  }
+  // Called after a hardware renderer registers as content key recipient.
+  // Triggers deferred processContentKeyResponse if CKC was cached.
+  virtual void OnHardwareRecipientAdded() {}
 
  protected:
   DrmSystemPlatform(

@@ -15,19 +15,23 @@
 #ifndef STARBOARD_TVOS_SHARED_MEDIA_APPLICATION_DRM_SYSTEM_H_
 #define STARBOARD_TVOS_SHARED_MEDIA_APPLICATION_DRM_SYSTEM_H_
 
+#import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 
 #include "starboard/drm.h"
 
+@class AVContentKey;
 @class AVContentKeyRequest;
 @class AVContentKeySession;
 
 NS_ASSUME_NONNULL_BEGIN
 
 /**
- *  @brief An application DRM system.
+ *  @brief An application DRM system. Conforms to AVContentKeySessionDelegate
+ *      to handle FairPlay key requests for the AVSBDL path (no AVPlayer).
+ *      For the AVPlayer path, the delegate is on SBDApplicationPlayer instead.
  */
-@interface SBDApplicationDrmSystem : NSObject
+@interface SBDApplicationDrmSystem : NSObject <AVContentKeySessionDelegate>
 
 /**
  *  @brief The @c AVContentKeySession used to decrypt playback.
@@ -43,6 +47,13 @@ NS_ASSUME_NONNULL_BEGIN
  *      certificate inside generateRequest() init data instead.
  */
 @property(nonatomic) NSData* serverCertificate;
+
+/**
+ *  @brief Returns the resolved @c AVContentKey for the given SKD identifier.
+ *      Used by the AVSBDL renderer via the DrmSystemPlatform bridge.
+ */
+- (nullable AVContentKey*)contentKeyForIdentifier:(const uint8_t*)key_id
+                                      key_id_size:(int)key_id_size;
 
 /**
  *  @brief Called when key data is received from Starboard.

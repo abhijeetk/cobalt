@@ -6,6 +6,7 @@
 > **Scope**: This document covers **only** the stream-based path: Chromium's built-in HLS demuxer (`HlsManifestDemuxerEngine`) feeding encrypted samples to Starboard's `AVSampleBufferDisplayLayer` (AVSBDL) with FairPlay DRM. This is **not** about the AVPlayer/UrlPlayer path. The UrlPlayer (AVPlayer) path is referenced only for comparison. For UrlPlayer documentation, see `Phase-1.md`, `Phase-2-FairPlay-DRM-Design-Doc.md`, and `EncryptedEventForwarding-Architecture.md`.
 >
 > **Related documents:**
+> - [FairPlay Handshake Debug Log](FairPlay-Handshake-Debug-Log.md#metadata-parity-investigation---may-25-2026) -- Current metadata-parity probes for the remaining `AVSampleBufferAttachContentKey` `-12161` blocker (`sinf/tenc`, `enca`, SKD identifier, parser metadata)
 > - [HLS Demuxer Modifications](HLS-Demuxer-Modifications.md) -- Demuxer/parser changes for clear + encrypted HLS
 > - [HLS Demuxer Design Doc](HLS-Demuxer-Design-Doc.md) -- Complete design doc for reviewer
 > - [AVContentKeySession Investigation](AVContentKeySession-Investigation.md) -- Remaining blocker: manual FairPlay key request for AVSBDL path
@@ -537,3 +538,25 @@ The Phase 1 POC (clear HLS) is **complete and verified** on physical hardware. T
 The POC is the only viable path to provide YouTube's full codec suite (VP9/Opus) on tvOS while maintaining FairPlay DRM requirements. The engineering focus should be on the **HLS Engine's handling of `skd://` URIs** and the **EME signaling path** (W4 + W5), as the Starboard rendering and DRM components are already mature and capable of supporting this architecture.
 
 Estimated total effort is **5-9 engineering days**, with the primary risk being the manifest-to-EME bridge logic (W4 + W5) which is architecturally novel -- upstream Chromium has never had a case where DRM key information is signaled from the HLS manifest level rather than the fMP4 container level.
+
+## 11. Related Setup References
+- [WebKit FairPlay Layout Test Setup Guide](WebKit-FairPlay-LayoutTest-Setup-Guide.md): local WebKit `fps-hls.html` run procedure, current Python CGI blocker, and source-reference comment rule for borrowed code.
+- [FairPlay Handshake Debug Log](FairPlay-Handshake-Debug-Log.md): physical Apple TV build/deploy/run evidence, latest local fixture result, and current SAMPLE-AES metadata propagation blocker.
+
+## 12. Bridge Review Reference
+
+Commit `aa909f5e309c1` adds the HLS `EXT-X-KEY` to `Mp2tStreamParser`
+metadata bridge. The May 25 bridge review is recorded in
+[FairPlay Handshake Debug Log](FairPlay-Handshake-Debug-Log.md#hls-sample-aes-bridge-review---may-25-2026).
+
+Verified result from `/tmp/cobalt_device_debug_20260525_120428.log`:
+
+```text
+AudioDecoderConfig ... encryption scheme: CBCS
+VideoDecoderConfig ... encryption scheme: CBCS
+```
+
+The previous unencrypted-config gap is closed. The next observed blocker in the
+local WebKit fixture is `AVContentKeySession` `CoreMediaErrorDomain -42681`
+after a CKC response with the old `0xcd` payload pattern, before the run reaches
+the renderer `WriteSample` logs.

@@ -113,6 +113,7 @@ class AVSBVideoRenderer : public VideoRenderer, private JobQueue::JobOwner {
   NSObject* status_observer_ = nullptr;
 
   DrmSystemPlatform* drm_system_ = nullptr;
+  bool content_key_recipient_registered_ = false;
   std::unique_ptr<AVVideoSampleBufferBuilder> sample_buffer_builder_;
   std::queue<scoped_refptr<AVSampleBuffer>> video_sample_buffers_;
   JobQueue::JobToken enqueue_sample_buffers_job_token_ =

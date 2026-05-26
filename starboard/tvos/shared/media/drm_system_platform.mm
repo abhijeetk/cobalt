@@ -16,24 +16,10 @@
 
 namespace starboard {
 
-// static
-bool DrmSystemPlatform::IsKeySystemSupported(const char* key_system) {
-  return false;
-}
-
-// static
-bool DrmSystemPlatform::IsSupported(SbDrmSystem drm_system) {
-  return false;
-}
-
-// static
-std::string DrmSystemPlatform::GetName() {
-  return "";
-}
-
-// static
-std::string DrmSystemPlatform::GetKeySystemName() {
-  return "";
-}
+// Stub implementations removed. When cobalt/internal/ is linked,
+// DrmSystemFairplay provides the real implementations of these static
+// methods in drm_system_fairplay.mm. Having stubs here caused the linker
+// to silently pick these (returning false/"") over the real ones,
+// breaking FairPlay key system detection.
 
 }  // namespace starboard

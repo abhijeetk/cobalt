@@ -24,6 +24,13 @@
 #import "starboard/tvos/shared/media/player_manager.h"
 #import "starboard/tvos/shared/starboard_application.h"
 
+// Declare AVSampleBufferDisplayLayer as AVContentKeyRecipient so we can
+// register it with the AVContentKeySession. This is required for
+// AVSampleBufferAttachContentKey to succeed on manually-built CMSampleBuffers.
+// WebKit uses the same pattern in AudioVideoRendererAVFObjC.mm.
+@interface AVSampleBufferDisplayLayer (CobaltKeySession) <AVContentKeyRecipient>
+@end
+
 static NSString* kAVSBDLStatusKeyPath = @"status";
 static NSString* kAVSBDLOutputObscuredKeyPath =
     @"outputObscuredDueToInsufficientExternalProtection";
@@ -162,6 +169,20 @@ AVSBVideoRenderer::AVSBVideoRenderer(JobQueue* job_queue,
     display_layer_ = (AVSampleBufferDisplayLayer*)display_view_.layer;
     display_layer_.videoGravity = AVLayerVideoGravityResizeAspect;
 
+    // Register display layer as content key recipient BEFORE any samples
+    // are enqueued. This is required for AVSampleBufferAttachContentKey to
+    // succeed on manually-built CMSampleBuffers (Apple error -12161 without).
+    if (drm_system_) {
+      AVContentKeySession* keySession = drm_system_->GetContentKeySession();
+      if (keySession) {
+        [keySession addContentKeyRecipient:display_layer_];
+        content_key_recipient_registered_ = true;
+        SB_LOG(INFO) << "[ABHIJEET][DRM] Video: addContentKeyRecipient on "
+                        "AVSampleBufferDisplayLayer";
+        drm_system_->OnHardwareRecipientAdded();
+      }
+    }
+
     id<SBDStarboardApplication> application = SBDGetApplication();
     [application attachPlayerView:display_view_];
   });
@@ -201,6 +222,12 @@ AVSBVideoRenderer::~AVSBVideoRenderer() {
       (__bridge const void*)display_layer_);
 
   @autoreleasepool {
+    if (drm_system_) {
+      AVContentKeySession* keySession = drm_system_->GetContentKeySession();
+      if (keySession) {
+        [keySession removeContentKeyRecipient:display_layer_];
+      }
+    }
     [display_layer_ removeObserver:status_observer_
                         forKeyPath:kAVSBDLStatusKeyPath];
     [display_layer_ removeObserver:status_observer_
@@ -496,28 +523,60 @@ void AVSBVideoRenderer::OnSampleBufferBuilderOutput(
 
   const SbDrmSampleInfo* drm_info = sample_buffer->input_buffer()->drm_info();
   if (drm_system_ && drm_info) {
-    // Attach content key and cryptor data to sample buffer.
-    AVContentKey* content_key = drm_system_->GetContentKey(
-        drm_info->identifier, drm_info->identifier_size);
-    SB_DCHECK(content_key);
+    SB_LOG(INFO) << "[ABHIJEET][DRM] Video encrypted sample: key_id_size="
+                 << drm_info->identifier_size
+                 << " subsample_count=" << drm_info->subsample_count
+                 << " recipient_registered="
+                 << content_key_recipient_registered_
+                 << " has_adjusted_mapping="
+                 << sample_buffer->adjusted_mapping().has_value();
 
-    NSError* error;
-    BOOL result = AVSampleBufferAttachContentKey(
-        sample_buffer->cm_sample_buffer(), content_key, &error);
-    if (!result) {
-      std::stringstream ss;
-      ss << "Failed to attach content key.";
-      avutil::AppendAVErrorDetails(error, &ss);
-      ReportError(ss.str());
-      return;
+    // When addContentKeyRecipient was called on the display layer, the key
+    // session handles decryption automatically - skip per-sample
+    // AVSampleBufferAttachContentKey (WebKit PR #21770 pattern).
+    if (!content_key_recipient_registered_) {
+      AVContentKey* content_key = drm_system_->GetContentKey(
+          drm_info->identifier, drm_info->identifier_size);
+      SB_LOG(INFO) << "[ABHIJEET][DRM] Video GetContentKey: content_key="
+                   << (content_key ? "present" : "NULL");
+      SB_DCHECK(content_key);
+
+      NSError* error;
+      BOOL result = AVSampleBufferAttachContentKey(
+          sample_buffer->cm_sample_buffer(), content_key, &error);
+      SB_LOG(INFO)
+          << "[ABHIJEET][DRM] Video AVSampleBufferAttachContentKey result="
+          << result
+          << " error=" << (error ? [[error description] UTF8String] : "none");
+      if (!result) {
+        std::stringstream ss;
+        ss << "Failed to attach content key.";
+        avutil::AppendAVErrorDetails(error, &ss);
+        ReportError(ss.str());
+        return;
+      }
     }
 
+    // Always attach cryptor subsample data so the renderer knows which parts
+    // of the sample buffer are encrypted.
     static NSString* kCMSampleAttachmentKey_CryptorSubsampleAuxiliaryData =
         @"CryptorSubsampleAuxiliaryData";
-    CFDataRef cryptor_info = CFDataCreate(
-        NULL,
-        reinterpret_cast<const unsigned char*>(drm_info->subsample_mapping),
-        drm_info->subsample_count * sizeof(SbDrmSubSampleMapping));
+
+    const SbDrmSubSampleMapping* mapping_ptr = drm_info->subsample_mapping;
+    int32_t subsample_count = drm_info->subsample_count;
+
+    if (sample_buffer->adjusted_mapping().has_value()) {
+      mapping_ptr = sample_buffer->adjusted_mapping()->data();
+      subsample_count =
+          static_cast<int32_t>(sample_buffer->adjusted_mapping()->size());
+      SB_LOG(INFO)
+          << "[ABHIJEET][DRM] Using PRE-ADJUSTED mapping from builder: "
+          << subsample_count << " subsamples.";
+    }
+
+    CFDataRef cryptor_info =
+        CFDataCreate(NULL, reinterpret_cast<const unsigned char*>(mapping_ptr),
+                     subsample_count * sizeof(SbDrmSubSampleMapping));
     CFDictionarySetValue(
         attachment,
         (__bridge CFStringRef)

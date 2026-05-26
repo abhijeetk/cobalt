@@ -33,15 +33,22 @@ class AVVideoSampleBufferBuilder {
   class AVSampleBuffer : public RefCountedThreadSafe<AVSampleBuffer> {
    public:
     AVSampleBuffer(CMSampleBufferRef cm_sample_buffer,
-                   const scoped_refptr<InputBuffer>& input_buffer)
+                   const scoped_refptr<InputBuffer>& input_buffer,
+                   std::optional<std::vector<SbDrmSubSampleMapping>>
+                       adjusted_mapping = std::nullopt)
         : cm_sample_buffer_(cm_sample_buffer),
           input_buffer_(input_buffer),
-          presentation_timestamp_(input_buffer->timestamp()) {}
+          presentation_timestamp_(input_buffer->timestamp()),
+          adjusted_mapping_(std::move(adjusted_mapping)) {}
     ~AVSampleBuffer() { CFRelease(cm_sample_buffer_); }
 
     CMSampleBufferRef cm_sample_buffer() const { return cm_sample_buffer_; }
     const scoped_refptr<InputBuffer>& input_buffer() { return input_buffer_; }
     int64_t presentation_timestamp() const { return presentation_timestamp_; }
+    const std::optional<std::vector<SbDrmSubSampleMapping>>& adjusted_mapping()
+        const {
+      return adjusted_mapping_;
+    }
 
    private:
     AVSampleBuffer(const AVSampleBuffer&) = delete;
@@ -50,6 +57,7 @@ class AVVideoSampleBufferBuilder {
     CMSampleBufferRef cm_sample_buffer_ = nullptr;
     const scoped_refptr<InputBuffer> input_buffer_;
     int64_t presentation_timestamp_ = 0;
+    std::optional<std::vector<SbDrmSubSampleMapping>> adjusted_mapping_;
   };
 
   typedef std::function<void(const scoped_refptr<AVSampleBuffer>)>

@@ -24,6 +24,7 @@
 #include "base/trace_event/trace_event.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/decrypt_config.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
 #include "media/starboard/buildflags.h"
@@ -914,6 +915,31 @@ void StarboardRenderer::OnDemuxerStreamRead(
 
   DCHECK(player_bridge_);
 
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] StarboardRenderer::OnDemuxerStreamRead"
+            << " stream_type=" << stream->type()
+            << " max_buffers=" << max_buffers << " status=" << status
+            << " buffer_count=" << buffers.size();
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    const auto& buffer = buffers[i];
+    LOG(INFO)
+        << "[ABHIJEET][FPS-FLOW]   demux_buffer[" << i << "]"
+        << " eos=" << buffer->end_of_stream()
+        << " size=" << (buffer->end_of_stream() ? 0 : buffer->size())
+        << " ts_us="
+        << (buffer->end_of_stream() ? -1 : buffer->timestamp().InMicroseconds())
+        << " decrypt_config="
+        << ((!buffer->end_of_stream() && buffer->decrypt_config()) ? "present"
+                                                                   : "null")
+        << " key_id_size="
+        << ((!buffer->end_of_stream() && buffer->decrypt_config())
+                ? buffer->decrypt_config()->key_id().size()
+                : 0)
+        << " iv_size="
+        << ((!buffer->end_of_stream() && buffer->decrypt_config())
+                ? buffer->decrypt_config()->iv().size()
+                : 0);
+  }
+
   if (status == DemuxerStream::kOk) {
     if (stream == audio_stream_) {
       DCHECK(audio_read_in_progress_);
@@ -982,6 +1008,14 @@ void StarboardRenderer::OnNeedData(DemuxerStream::Type type,
                                    int max_number_of_buffers_to_write) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] StarboardRenderer::OnNeedData"
+            << " type=" << type
+            << " requested_max=" << max_number_of_buffers_to_write
+            << " source_url_empty=" << source_url_.empty()
+            << " audio_read_in_progress=" << audio_read_in_progress_
+            << " video_read_in_progress=" << video_read_in_progress_
+            << " max_samples_per_write=" << max_samples_per_write_;
+
   // In case if the callback is fired when creation of the `player_bridge_`
   // fails.
   // We may also need this for suspend/resume support.
@@ -993,6 +1027,8 @@ void StarboardRenderer::OnNeedData(DemuxerStream::Type type,
 #if SB_HAS(PLAYER_WITH_URL)
   // URL player handles all buffering natively — ignore OnNeedData.
   if (!source_url_.empty()) {
+    LOG(INFO) << "[ABHIJEET][FPS-FLOW] StarboardRenderer::OnNeedData"
+              << " ignored for URL player source_url=" << source_url_;
     return;
   }
 #endif  // SB_HAS(PLAYER_WITH_URL)
@@ -1091,6 +1127,10 @@ void StarboardRenderer::OnNeedData(DemuxerStream::Type type,
   auto stream = (type == DemuxerStream::AUDIO ? audio_stream_ : video_stream_);
   DCHECK(stream);
 
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] StarboardRenderer::OnNeedData"
+            << " issuing DemuxerStream::Read type=" << type
+            << " max_buffers=" << max_buffers
+            << " stream_mime=" << stream->mime_type();
   stream->Read(max_buffers,
                base::BindOnce(&StarboardRenderer::OnDemuxerStreamRead,
                               weak_factory_.GetWeakPtr(), stream, max_buffers));

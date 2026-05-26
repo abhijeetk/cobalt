@@ -80,6 +80,7 @@ class AVSBAudioRenderer : public AudioRenderer, private JobQueue::JobOwner {
   NSObject* status_observer_ = nullptr;
 
   DrmSystemPlatform* drm_system_ = nullptr;
+  bool content_key_recipient_registered_ = false;
   std::unique_ptr<AVAudioSampleBufferBuilder> sample_buffer_builder_;
 
   int64_t seek_to_time_ = 0;

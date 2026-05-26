@@ -27,6 +27,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "media/base/decrypt_config.h"
 #include "media/starboard/buildflags.h"
 #include "media/starboard/starboard_utils.h"
 #include "starboard/common/media.h"
@@ -834,7 +835,12 @@ void SbPlayerBridge::WriteBuffersInternal(
 #endif  // SB_HAS(PLAYER_WITH_URL)
 
   auto sample_type = DemuxerStreamTypeToSbMediaType(type);
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge::WriteBuffersInternal"
+            << " type=" << type << " sample_type=" << sample_type
+            << " buffer_count=" << buffers.size();
   if (buffers.size() == 1 && buffers[0]->end_of_stream()) {
+    LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge::WriteBuffersInternal"
+              << " forwarding EOS type=" << type;
     sbplayer_interface_->WriteEndOfStream(player_,
                                           DemuxerStreamTypeToSbMediaType(type));
     return;
@@ -855,6 +861,8 @@ void SbPlayerBridge::WriteBuffersInternal(
     const auto& buffer = buffers[i];
     if (buffer->end_of_stream()) {
       DCHECK_EQ(static_cast<size_t>(i), buffers.size() - 1);
+      LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge::WriteBuffersInternal"
+                << " saw trailing EOS type=" << type;
       if (type == DemuxerStream::AUDIO) {
         pending_audio_eos_buffer_ = true;
       } else {
@@ -889,6 +897,21 @@ void SbPlayerBridge::WriteBuffersInternal(
     if (buffer->decrypt_config()) {
       FillDrmSampleInfo(buffer, drm_info, subsample_mapping);
     }
+    LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge buffer[" << i << "]"
+              << " type=" << type << " size=" << buffer->size()
+              << " ts_us=" << buffer->timestamp().InMicroseconds()
+              << " eos=" << buffer->end_of_stream()
+              << " keyframe=" << buffer->is_key_frame() << " decrypt_config="
+              << (buffer->decrypt_config() ? "present" : "null")
+              << " key_id_size="
+              << (buffer->decrypt_config()
+                      ? buffer->decrypt_config()->key_id().size()
+                      : 0)
+              << " iv_size="
+              << (buffer->decrypt_config()
+                      ? buffer->decrypt_config()->iv().size()
+                      : 0)
+              << " subsamples=" << drm_info->subsample_count;
 
     gathered_sbplayer_sample_infos_side_data.push_back(
         SbPlayerSampleSideData());
@@ -931,6 +954,9 @@ void SbPlayerBridge::WriteBuffersInternal(
   }
 
   if (!gathered_sbplayer_sample_infos.empty()) {
+    LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge calling"
+              << " SbPlayerWriteSamples type=" << type
+              << " count=" << gathered_sbplayer_sample_infos.size();
 #if BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
     cval_stats_->StartTimer(MediaTiming::SbPlayerWriteSamples,
                             pipeline_identifier_);
@@ -1035,7 +1061,13 @@ void SbPlayerBridge::OnDecoderStatus(SbPlayer player,
 #endif  // SB_HAS(PLAYER_WITH_URL)
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge::OnDecoderStatus"
+            << " player_match=" << (player_ == player) << " type=" << type
+            << " state=" << state << " ticket=" << ticket
+            << " expected_ticket=" << ticket_ << " bridge_state=" << state_;
   if (player_ != player || ticket != ticket_) {
+    LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge::OnDecoderStatus"
+              << " ignored due to player/ticket mismatch";
     return;
   }
 
@@ -1061,6 +1093,9 @@ void SbPlayerBridge::OnDecoderStatus(SbPlayer player,
 
   auto max_number_of_samples_to_write =
       SbPlayerGetMaximumNumberOfSamplesPerWrite(player_, type);
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] SbPlayerBridge::OnDecoderStatus"
+            << " requesting data stream_type=" << stream_type
+            << " max_samples=" << max_number_of_samples_to_write;
   if (state_ == kResuming) {
 #if BUILDFLAG(COBALT_MEDIA_ENABLE_SUSPEND_RESUME)
     if (decoder_buffer_cache_.HasMoreBuffers(stream_type)) {

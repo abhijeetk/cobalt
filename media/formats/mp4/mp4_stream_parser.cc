@@ -65,6 +65,39 @@ EncryptionScheme GetEncryptionScheme(const ProtectionSchemeInfo& sinf) {
   }
 }
 
+std::string HexString(const std::vector<uint8_t>& bytes) {
+  if (bytes.empty())
+    return "";
+  return base::HexEncode(bytes);
+}
+
+std::string HexString(const uint8_t* bytes, size_t size) {
+  if (!bytes || !size)
+    return "";
+  return base::HexEncode(base::span(bytes, size));
+}
+
+void LogProtectionSchemeInfo(const char* track_type,
+                             uint32_t track_id,
+                             const ProtectionSchemeInfo& sinf) {
+  if (!sinf.info.track_encryption.is_encrypted)
+    return;
+  const TrackEncryption& tenc = sinf.info.track_encryption;
+  LOG(INFO) << "[ABHIJEET][FPS-FLOW] MP4 " << track_type
+      << " protection track_id=" << track_id
+      << " original_format=" << FourCCToString(sinf.format.format)
+      << " scheme=" << FourCCToString(sinf.type.type)
+      << " scheme_version=" << sinf.type.version
+      << " default_iv_size=" << static_cast<int>(tenc.default_iv_size)
+      << " default_kid=" << HexString(tenc.default_kid)
+      << " crypt_block=" << static_cast<int>(tenc.default_crypt_byte_block)
+      << " skip_block=" << static_cast<int>(tenc.default_skip_byte_block)
+      << " constant_iv_size="
+      << static_cast<int>(tenc.default_constant_iv_size)
+      << " constant_iv="
+      << HexString(tenc.default_constant_iv, tenc.default_constant_iv_size);
+}
+
 class ExternalMemoryAdapter : public DecoderBuffer::ExternalMemory {
  public:
   explicit ExternalMemoryAdapter(std::vector<uint8_t> memory)
@@ -722,6 +755,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
         scheme = GetEncryptionScheme(entry.sinf);
         if (scheme == EncryptionScheme::kUnencrypted)
           return false;
+        LogProtectionSchemeInfo("audio", audio_track_id, entry.sinf);
       }
 
       audio_config.Initialize(codec, sample_format, channel_layout,
@@ -802,6 +836,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
         scheme = GetEncryptionScheme(entry.sinf);
         if (scheme == EncryptionScheme::kUnencrypted)
           return false;
+        LogProtectionSchemeInfo("video", video_track_id, entry.sinf);
       }
       VideoCodec video_codec = entry.video_info.codec;
       VideoCodecProfile video_codec_profile = entry.video_info.profile;

@@ -5,6 +5,7 @@
 #include "media/base/media_resource.h"
 
 #include "base/no_destructor.h"
+#include "media/media_buildflags.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/storage_access_api/status.h"
 #include "url/gurl.h"
@@ -19,10 +20,17 @@ MediaResource::~MediaResource() = default;
 DemuxerStream* MediaResource::GetFirstStream(DemuxerStream::Type type) {
   const auto& streams = GetAllStreams();
   for (media::DemuxerStream* stream : streams) {
-    if (stream->type() == type)
+    if (stream->type() == type) {
       return stream;
+    }
   }
   return nullptr;
 }
+
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
+GURL MediaResource::GetMediaUrl() const {
+  return GURL();
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 
 }  // namespace media

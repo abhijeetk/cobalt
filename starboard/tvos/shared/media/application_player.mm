@@ -244,6 +244,7 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
         contentKeySessionWithKeySystem:AVContentKeySystemFairPlayStreaming];
     [_keySession setDelegate:self
                        queue:dispatch_queue_create("keySessionQueue", NULL)];
+#else
 #endif  // TARGET_OS_EMBEDDED
 
     [self updatePlayerState:kSbPlayerStateInitialized];

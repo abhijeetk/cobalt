@@ -380,6 +380,9 @@ media_subcomponent_deps = [
 
 if (is_cobalt && use_starboard_media) {
   media_subcomponent_deps += [ "//media/starboard" ]
+  if (is_ios && target_platform == "tvos") {
+    media_subcomponent_deps += [ "//media/starboard:url_player_demuxer" ]
+  }
 }
 
 if (is_fuchsia) {

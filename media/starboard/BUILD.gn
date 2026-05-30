@@ -27,29 +27,6 @@ config("disable_unreachable_warnings") {
   ]
 }
 
-source_set("url_player_demuxer") {
-  visibility = [
-    "//media",
-    "//media/filters",
-    "//media/starboard",
-    "//media/starboard:unit_tests",
-  ]
-
-  sources = [
-    "url_player_demuxer.cc",
-    "url_player_demuxer.h",
-  ]
-
-  deps = [
-    "//base",
-    "//media:media_buildflags",
-    "//media/base",
-    "//url",
-  ]
-
-  configs += [ "//media:media_config" ]
-}
-
 source_set("starboard") {
   visibility = [ "//media" ]
 
@@ -82,7 +59,10 @@ source_set("starboard") {
 
     deps += [ ":buildflags" ]
     if (is_ios && target_platform == "tvos") {
-      deps += [ ":url_player_demuxer" ]
+      sources += [
+        "url_player_demuxer.cc",
+        "url_player_demuxer.h",
+      ]
     }
   }
 
@@ -137,9 +117,6 @@ source_set("unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
-  if (use_starboard_media && is_ios && target_platform == "tvos") {
-    deps += [ ":url_player_demuxer" ]
-  }
 }
 
 buildflag_header("buildflags") {

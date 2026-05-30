@@ -89,9 +89,6 @@ source_set("filters") {
 
   libs = []
 
-  if (is_cobalt && use_starboard_media && is_ios && target_platform == "tvos") {
-    deps += [ "//media/starboard:url_player_demuxer" ]
-  }
 
   if (proprietary_codecs) {
     sources += [

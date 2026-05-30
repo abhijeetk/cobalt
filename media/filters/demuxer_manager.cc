@@ -19,10 +19,6 @@
 #include "media/base/media_switches.h"
 #include "media/filters/chunk_demuxer.h"
 #include "media/filters/ffmpeg_demuxer.h"
-#include "build/build_config.h"
-#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
-#include "media/starboard/url_player_demuxer.h"
-#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 #include "net/storage_access_api/status.h"
 #include "url/gurl.h"
 
@@ -132,14 +128,6 @@ DemuxerManager::~DemuxerManager() {
   if (GetDemuxerType() == DemuxerType::kManifestDemuxer) {
     media_task_runner_->DeleteSoon(FROM_HERE, std::move(demuxer_));
   }
-}
-
-bool DemuxerManager::ShouldUseUrlPlayer() const {
-#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
-  return IsHlsUrl(loaded_url_);
-#else
-  return false;
-#endif
 }
 
 void DemuxerManager::InvalidateWeakPtrs() {
@@ -359,16 +347,8 @@ PipelineStatus DemuxerManager::CreateDemuxer(
 #if BUILDFLAG(ENABLE_FFMPEG)
     SetDemuxer(CreateFFmpegDemuxer());
 #elif BUILDFLAG(USE_STARBOARD_MEDIA)
-#if BUILDFLAG(IS_IOS_TVOS)
-    if (ShouldUseUrlPlayer()) {
-      SetDemuxer(std::make_unique<UrlPlayerDemuxer>(media_task_runner_,
-                                                    loaded_url_));
-    } else
-#endif  // BUILDFLAG(IS_IOS_TVOS)
-    {
-      LOG(INFO) << "Progressive streams are unsupported.";
-      return DEMUXER_ERROR_NO_SUPPORTED_STREAMS;
-    }
+    LOG(INFO) << "Progressive streams are unsupported.";
+    return DEMUXER_ERROR_NO_SUPPORTED_STREAMS;
 #else
     return DEMUXER_ERROR_PROGRESSIVE_DISABLED;
 #endif

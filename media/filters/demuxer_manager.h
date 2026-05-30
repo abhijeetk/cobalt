@@ -116,11 +116,6 @@ class MEDIA_EXPORT DemuxerManager {
 #endif  // BUILDFLAG(ENABLE_HLS_DEMUXER)
   void DisallowFallback();
 
-  // Returns true if the loaded URL should be handled by the platform's native
-  // URL player (e.g., AVPlayer for HLS on tvOS) instead of creating a
-  // DataSource and stream-based demuxer.
-  bool ShouldUseUrlPlayer() const;
-
   // Methods that help manage demuxers
   std::optional<double> GetDemuxerDuration();
   std::optional<DemuxerType> GetDemuxerType() const;

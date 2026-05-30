@@ -20,9 +20,8 @@ MediaResource::~MediaResource() = default;
 DemuxerStream* MediaResource::GetFirstStream(DemuxerStream::Type type) {
   const auto& streams = GetAllStreams();
   for (media::DemuxerStream* stream : streams) {
-    if (stream->type() == type) {
+    if (stream->type() == type)
       return stream;
-    }
   }
   return nullptr;
 }

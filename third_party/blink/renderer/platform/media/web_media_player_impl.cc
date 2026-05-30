@@ -967,12 +967,6 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
     return;
   }
 
-  // Platform URL player handles its own data loading, no DataSource needed.
-  if (demuxer_manager_->ShouldUseUrlPlayer()) {
-    StartPipeline();
-    return;
-  }
-
   // Short circuit the more complex loading path for data:// URLs. Sending
   // them through the network based loading path just wastes memory and causes
   // worse performance since reads become asynchronous.

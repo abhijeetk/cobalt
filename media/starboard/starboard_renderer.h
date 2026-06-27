@@ -107,6 +107,21 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
   using UpdateStarboardRenderingModeCallback =
       base::RepeatingCallback<void(const StarboardRenderingMode mode)>;
   using GetSbWindowHandleCallback = base::RepeatingCallback<void()>;
+#if BUILDFLAG(IS_IOS_TVOS)
+  using DurationChangeCB =
+      base::RepeatingCallback<void(base::TimeDelta duration)>;
+  using BufferedRangesCB =
+      base::RepeatingCallback<void(base::TimeDelta start,
+                                   base::TimeDelta length)>;
+
+  void SetDurationChangeCB(DurationChangeCB cb) {
+    duration_change_cb_ = std::move(cb);
+  }
+  void SetBufferedRangesCB(BufferedRangesCB cb) {
+    buffered_ranges_cb_ = std::move(cb);
+  }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+
 #if BUILDFLAG(IS_ANDROID)
   using RequestOverlayInfoCallBack =
       base::RepeatingCallback<void(bool restart_for_transitions)>;
@@ -158,6 +173,8 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
   };
 
   // Returns true when the renderer is operating in URL player mode.
+  // This is a runtime check only; it does not replace the compile-time
+  // #if BUILDFLAG(IS_IOS_TVOS) guard needed for URL-player-only symbols.
   bool IsUrlPlayer() const;
 #if BUILDFLAG(IS_IOS_TVOS)
   // Handles presenting state for URL player: propagates video resolution
@@ -240,6 +257,10 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
   PaintVideoHoleFrameCallback paint_video_hole_frame_cb_;
   UpdateStarboardRenderingModeCallback update_starboard_rendering_mode_cb_;
   GetSbWindowHandleCallback get_sb_window_handle_cb_;
+#if BUILDFLAG(IS_IOS_TVOS)
+  DurationChangeCB duration_change_cb_;
+  BufferedRangesCB buffered_ranges_cb_;
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 #if BUILDFLAG(IS_ANDROID)
   RequestOverlayInfoCallBack request_overlay_info_cb_;
 #endif  // BUILDFLAG(IS_ANDROID)

@@ -2275,6 +2275,9 @@ bool WebMediaPlayerImpl::CanPlayThrough() {
     return true;
   if (GetDemuxerType() == media::DemuxerType::kChunkDemuxer)
     return true;
+  // ManifestDemuxer (HLS) manages its own buffering like ChunkDemuxer.
+  if (GetDemuxerType() == media::DemuxerType::kManifestDemuxer)
+    return true;
   if (demuxer_manager_->DataSourceFullyBuffered()) {
     return true;
   }

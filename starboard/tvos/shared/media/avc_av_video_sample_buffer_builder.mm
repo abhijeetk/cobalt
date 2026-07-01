@@ -83,9 +83,15 @@ void AvcAVVideoSampleBufferBuilder::WriteInputBuffer(
     data_size -= bytes_to_skip;
   }
 
+  size_t avcc_size = GetAvccSizeFromAnnexB(source_data, data_size);
+  bool is_annex_b = (avcc_size > 0);
+  if (!is_annex_b) {
+    avcc_size = data_size;
+  }
+
   CMBlockBufferRef block;
   OSStatus status = CMBlockBufferCreateWithMemoryBlock(
-      NULL, NULL, data_size, NULL, NULL, 0, data_size,
+      NULL, NULL, avcc_size, NULL, NULL, 0, avcc_size,
       kCMBlockBufferAssureMemoryNowFlag, &block);
   if (status != 0) {
     ReportOSError("BlockBufferCreate", status);
@@ -93,19 +99,25 @@ void AvcAVVideoSampleBufferBuilder::WriteInputBuffer(
   }
 
   char* block_data;
-  status = CMBlockBufferGetDataPointer(block, 0, &data_size, &data_size,
+  size_t total_block_size = 0;
+  status = CMBlockBufferGetDataPointer(block, 0, nullptr, &total_block_size,
                                        &block_data);
   if (status != 0) {
     ReportOSError("BlockGetDataPointer", status);
     CFRelease(block);
     return;
   }
+  SB_DCHECK(total_block_size == avcc_size);
 
-  if (!ConvertAnnexBToAvcc(source_data, data_size,
-                           reinterpret_cast<uint8_t*>(block_data))) {
-    ReportError("Failed to convert input data into avcc format");
-    CFRelease(block);
-    return;
+  if (is_annex_b) {
+    if (!ConvertAnnexBToAvcc(source_data, data_size,
+                             reinterpret_cast<uint8_t*>(block_data))) {
+      ReportError("Failed to convert input data into avcc format");
+      CFRelease(block);
+      return;
+    }
+  } else {
+    memcpy(block_data, source_data, data_size);
   }
 
   CMSampleTimingInfo timing_info;
@@ -117,7 +129,7 @@ void AvcAVVideoSampleBufferBuilder::WriteInputBuffer(
   CMSampleBufferRef cm_sample_buffer;
   status = CMSampleBufferCreateReady(kCFAllocatorDefault, block,
                                      format_description_, 1, 1, &timing_info, 1,
-                                     &data_size, &cm_sample_buffer);
+                                     &avcc_size, &cm_sample_buffer);
   CFRelease(block);
   if (status != 0) {
     ReportOSError("SampleBufferCreate", status);

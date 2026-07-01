@@ -72,7 +72,7 @@ namespace blink {
 
 namespace {
 
-#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER) && !BUILDFLAG(USE_STARBOARD_MEDIA)
 
 bool IsMp2tCodecSupported(std::string_view codec_id) {
   if (auto result =
@@ -102,7 +102,7 @@ bool IsMp2tCodecSupported(std::string_view codec_id) {
   return false;
 }
 
-#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER) && !BUILDFLAG(USE_STARBOARD_MEDIA)
 
 }  // namespace
 
@@ -618,7 +618,7 @@ bool MediaSource::IsTypeSupportedInternal(ExecutionContext* context,
   String codecs = content_type.Parameter("codecs");
   ContentType filtered_content_type = content_type;
 
-#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER) && !BUILDFLAG(USE_STARBOARD_MEDIA)
   // Mime util doesn't include the mp2t container in order to prevent codec
   // support leaking into HtmlMediaElement.canPlayType. If the stream parser
   // is enabled, we should check that the codecs are valid using the mp4

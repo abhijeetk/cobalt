@@ -437,7 +437,10 @@ CobaltContentRendererClient::GetSupportedKeySystems(
 
 bool CobaltContentRendererClient::IsDecoderSupportedAudioType(
     const ::media::AudioType& type) {
-  CHECK(content::RenderThread::IsMainThread());
+  // The HLS demuxer's RenditionManager queries codec support from the media
+  // thread during variant filtering. SbMediaCanPlayMimeAndKeySystem is a
+  // read-only query with no mutable state, so it is safe to call from any
+  // thread.
   std::string mime = GetMimeFromAudioType(type);
   SbMediaSupportType support_type = kSbMediaSupportTypeNotSupported;
   if (!mime.empty()) {
@@ -451,7 +454,7 @@ bool CobaltContentRendererClient::IsDecoderSupportedAudioType(
 
 bool CobaltContentRendererClient::IsDecoderSupportedVideoType(
     const ::media::VideoType& type) {
-  CHECK(content::RenderThread::IsMainThread());
+  // See comment in IsDecoderSupportedAudioType above.
   std::string mime = GetMimeFromVideoType(type);
   SbMediaSupportType support_type = kSbMediaSupportTypeNotSupported;
   if (!mime.empty()) {

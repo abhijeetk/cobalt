@@ -110,6 +110,10 @@ bool ConvertAnnexBToAvcc(const uint8_t* annex_b_source,
                          size_t size,
                          uint8_t* avcc_destination);
 
+// Returns the required size for an AVCC buffer (with 4-byte lengths) converted
+// from the given Annex B buffer. Returns 0 if the data is not valid Annex B.
+size_t GetAvccSizeFromAnnexB(const uint8_t* data, size_t size);
+
 }  // namespace starboard
 
 #endif  // STARBOARD_SHARED_STARBOARD_MEDIA_AVC_UTIL_H_

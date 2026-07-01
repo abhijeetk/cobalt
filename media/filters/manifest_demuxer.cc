@@ -63,6 +63,10 @@ bool ManifestDemuxer::ManifestDemuxerStream::SupportsConfigChanges() {
   return stream_->SupportsConfigChanges();
 }
 
+std::string ManifestDemuxer::ManifestDemuxerStream::mime_type() const {
+  return stream_->mime_type();
+}
+
 ManifestDemuxer::~ManifestDemuxer() {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   impl_->Stop();

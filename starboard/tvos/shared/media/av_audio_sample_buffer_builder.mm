@@ -67,20 +67,32 @@ class AacAVSampleBufferBuilder : public AVAudioSampleBufferBuilder {
     SB_DCHECK(!error_occurred_);
     SB_DCHECK(input_buffer->audio_stream_info().codec == kSbMediaAudioCodecAac);
 
+    const uint8_t* data = input_buffer->data();
+    size_t size = input_buffer->size();
+
+    // Detect ADTS header (sync word 0xFFF) and skip it if present.
+    // HLS demuxer may deliver raw AAC frames without ADTS headers.
+    bool is_adts = (size >= 7 && data[0] == 0xFF && (data[1] & 0xF0) == 0xF0);
+    size_t header_size = is_adts ? kADTSHeaderSize : 0;
+
+    if (size < header_size) {
+      RecordError("Audio buffer too small for ADTS header");
+      return false;
+    }
+
     CMBlockBufferRef block;
     // TODO: Avoid releasing |input_buffer| before |sample_buffer| is released,
     // the internal data may be still in use.
     OSStatus status = CMBlockBufferCreateWithMemoryBlock(
-        NULL, const_cast<uint8_t*>(input_buffer->data() + kADTSHeaderSize),
-        input_buffer->size() - kADTSHeaderSize, kCFAllocatorNull, NULL, 0,
-        input_buffer->size() - kADTSHeaderSize, 0, &block);
+        NULL, const_cast<uint8_t*>(data + header_size), size - header_size,
+        kCFAllocatorNull, NULL, 0, size - header_size, 0, &block);
     if (status != 0) {
       RecordOSError("CreateBlockBuffer", status);
       return false;
     }
 
     AudioStreamPacketDescription packet_desc = {0};
-    packet_desc.mDataByteSize = input_buffer->size() - kADTSHeaderSize;
+    packet_desc.mDataByteSize = size - header_size;
     packet_desc.mStartOffset = 0;
     packet_desc.mVariableFramesInPacket = kAacFramesPerPacket;
 

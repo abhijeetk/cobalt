@@ -266,7 +266,9 @@ class MEDIA_EXPORT ManifestDemuxer : public Demuxer, ManifestDemuxerEngineHost {
     StreamLiveness liveness() const override;
     void EnableBitstreamConverter() override;
     bool SupportsConfigChanges() override;
+#if BUILDFLAG(USE_STARBOARD_MEDIA)
     std::string mime_type() const override;
+#endif  // BUILDFLAG(USE_STARBOARD_MEDIA)
 
    private:
     WrapperReadCb read_cb_;

@@ -365,8 +365,7 @@ const char kAllTracingCategories[] = "*";
   // Note that the actual size and and position of this view are irrelevant at
   // this point: it will be changed in starboard's
   // AVSBVideoRenderer::SetBounds() when necessary.
-  UIView* playerContainerView =
-      [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+  UIView* playerContainerView = [[UIView alloc] init];
   playerContainerView.accessibilityIdentifier = @"Player Container";
   [_contentView addSubview:playerContainerView];
   [SBDGetApplication() setPlayerContainerView:playerContainerView];

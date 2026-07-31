@@ -12,9 +12,9 @@
 #include "build/build_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
-#if BUILDFLAG(IS_IOS_TVOS)
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 #include "url/gurl.h"
-#endif  // BUILDFLAG(IS_IOS_TVOS)
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 
 namespace media {
 
@@ -46,10 +46,10 @@ class MEDIA_EXPORT MediaResource {
   // exists or a null pointer if there is no streams of that type.
   DemuxerStream* GetFirstStream(DemuxerStream::Type type);
 
-#if BUILDFLAG(IS_IOS_TVOS)
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
   // Returns the media URL for URL player.
   virtual GURL GetMediaUrl() const;
-#endif  // BUILDFLAG(IS_IOS_TVOS)
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 };
 
 }  // namespace media

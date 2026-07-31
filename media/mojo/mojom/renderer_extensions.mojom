@@ -151,6 +151,7 @@ interface StarboardRendererExtension {
   // Initialize media bypass bridge in single-process mode.
   InitializeWithBypassBridge(uint32 bypass_bridge_id) => (bool success);
 
+  [EnableIf=is_ios]
   // Pass source URL for URL player.
   SetSourceUrl(string source_url);
 

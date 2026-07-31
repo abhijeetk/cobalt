@@ -159,9 +159,11 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
 
   // Returns true when the renderer is operating in URL player mode.
   bool IsUrlPlayer() const;
+#if BUILDFLAG(IS_IOS_TVOS)
   // Handles presenting state for URL player: propagates video resolution
   // for hole-punch rendering and re-applies playback rate.
   void OnUrlPlayerPresenting();
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
   void CreatePlayerBridge();
   void ApplyPendingBounds();

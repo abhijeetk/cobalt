@@ -548,9 +548,9 @@ bool StarboardRenderer::IsUrlPlayer() const {
 #endif
 }
 
+#if BUILDFLAG(IS_IOS_TVOS)
 void StarboardRenderer::OnUrlPlayerPresenting() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-#if BUILDFLAG(IS_IOS_TVOS)
   if (!player_bridge_) {
     return;
   }
@@ -569,10 +569,8 @@ void StarboardRenderer::OnUrlPlayerPresenting() {
   // Re-apply playback rate; the platform player ignores rate changes
   // before it is ready to play.
   player_bridge_->SetPlaybackRate(playback_rate_);
-#endif  // BUILDFLAG(IS_IOS_TVOS)
 }
 
-#if BUILDFLAG(IS_IOS_TVOS)
 void StarboardRenderer::SetSourceUrl(const std::string& source_url) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   source_url_ = source_url;
@@ -1066,7 +1064,9 @@ void StarboardRenderer::OnPlayerStatus(SbPlayerState state) {
           base::BindOnce(&StarboardRenderer::OnBufferingStateChange,
                          weak_factory_.GetWeakPtr(), buffering_state_));
       if (IsUrlPlayer()) {
+#if BUILDFLAG(IS_IOS_TVOS)
         OnUrlPlayerPresenting();
+#endif  // BUILDFLAG(IS_IOS_TVOS)
       } else {
         audio_write_duration_for_preroll_ = audio_write_duration_ =
             HasRemoteAudioOutputs(player_bridge_->GetAudioConfigurations())

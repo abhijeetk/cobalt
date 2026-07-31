@@ -516,12 +516,12 @@ void StarboardRendererWrapper::InitializeWithBypassBridge(
   std::move(callback).Run(true);
 }
 
+#if BUILDFLAG(IS_IOS_TVOS)
 void StarboardRendererWrapper::SetSourceUrl(const std::string& source_url) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-#if BUILDFLAG(IS_IOS_TVOS)
   GetRenderer()->SetSourceUrl(source_url);
-#endif  // BUILDFLAG(IS_IOS_TVOS)
 }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 #if BUILDFLAG(IS_ANDROID)
 void StarboardRendererWrapper::OnOverlayInfoChanged(

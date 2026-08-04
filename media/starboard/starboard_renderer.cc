@@ -29,6 +29,7 @@
 #include "media/base/video_codecs.h"
 #include "media/starboard/buildflags.h"
 #include "media/starboard/decoder_buffer_allocator.h"
+#include "starboard/common/log.h"
 #include "starboard/common/media.h"
 #include "starboard/common/player.h"
 #include "starboard/common/string.h"
@@ -213,6 +214,7 @@ void StarboardRenderer::Initialize(MediaResource* media_resource,
   client_ = client;
   init_cb_ = std::move(init_cb);
 
+#if BUILDFLAG(IS_IOS_TVOS)
   if (IsUrlPlayer()) {
     state_ = STATE_INITIALIZING;
     if (get_sb_window_handle_cb_) {
@@ -222,6 +224,7 @@ void StarboardRenderer::Initialize(MediaResource* media_resource,
     CreatePlayerBridge();
     return;
   }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
   audio_stream_ = media_resource->GetFirstStream(DemuxerStream::AUDIO);
   video_stream_ = media_resource->GetFirstStream(DemuxerStream::VIDEO);
@@ -540,15 +543,11 @@ void StarboardRenderer::OnSbWindowHandleReady(const uint64_t sb_window_handle) {
   CreatePlayerBridge();
 }
 
-bool StarboardRenderer::IsUrlPlayer() const {
 #if BUILDFLAG(IS_IOS_TVOS)
+bool StarboardRenderer::IsUrlPlayer() const {
   return !source_url_.empty();
-#else
-  return false;
-#endif
 }
 
-#if BUILDFLAG(IS_IOS_TVOS)
 void StarboardRenderer::OnUrlPlayerPresenting() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!player_bridge_) {
@@ -559,6 +558,8 @@ void StarboardRenderer::OnUrlPlayerPresenting() {
   if (width > 0 && height > 0) {
     gfx::Size size(width, height);
     client_->OnVideoNaturalSizeChange(size);
+    // TODO(b/541996730): Handle resolution changes during adaptive HLS
+    // playback. Currently this is only called once at presenting state.
     paint_video_hole_frame_cb_.Run(size);
   } else {
     LOG(WARNING) << "Platform player reported invalid dimensions (" << width
@@ -632,11 +633,34 @@ SbPlayerInterface* StarboardRenderer::GetSbPlayerInterface() {
   return &sbplayer_interface_;
 }
 
+void StarboardRenderer::UpdateAudioWriteDuration() {
+#if BUILDFLAG(IS_IOS_TVOS)
+  // URL player handles audio natively; no write duration to configure.
+  if (IsUrlPlayer()) {
+    return;
+  }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+  // TODO(b/267678497): When `player_bridge_->GetAudioConfigurations()`
+  // returns no audio configurations, update the write durations again
+  // before the SbPlayer reaches `kSbPlayerStatePresenting`.
+  audio_write_duration_for_preroll_ = audio_write_duration_ =
+      HasRemoteAudioOutputs(player_bridge_->GetAudioConfigurations())
+          ? audio_write_duration_remote_
+          : audio_write_duration_local_;
+  LOG(INFO) << "audio write duration at " << audio_write_duration_
+            << ", max_video_capabilities_ at " << max_video_capabilities_;
+}
+
 void StarboardRenderer::CreatePlayerBridge() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(init_cb_);
   DCHECK_EQ(state_, STATE_INITIALIZING);
-  DCHECK(audio_stream_ || video_stream_ || IsUrlPlayer());
+#if BUILDFLAG(IS_IOS_TVOS)
+  DCHECK(audio_stream_ || video_stream_ ||
+         (IsUrlPlayer() && !audio_stream_ && !video_stream_));
+#else
+  DCHECK(audio_stream_ || video_stream_);
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
   TRACE_EVENT0("media", "StarboardRenderer::CreatePlayerBridge");
 
@@ -676,8 +700,8 @@ void StarboardRenderer::CreatePlayerBridge() {
   // number of active players.
   player_bridge_.reset();
 
-  if (IsUrlPlayer()) {
 #if BUILDFLAG(IS_IOS_TVOS)
+  if (IsUrlPlayer()) {
     player_bridge_.reset(new SbPlayerBridge(
         GetSbPlayerInterface(), task_runner_, source_url_, sb_window_, this,
         /*allow_resume_after_suspend=*/false, kSbPlayerOutputModePunchOut,
@@ -689,8 +713,8 @@ void StarboardRenderer::CreatePlayerBridge() {
         /*pipeline_identifier=*/""
 #endif  // BUILDFLAG(COBALT_MEDIA_ENABLE_CVAL)
         ));
-#endif  // BUILDFLAG(IS_IOS_TVOS)
   } else {
+#endif  // BUILDFLAG(IS_IOS_TVOS)
     LOG(INFO) << "Creating SbPlayerBridge.";
 
     player_bridge_.reset(new SbPlayerBridge(
@@ -712,7 +736,9 @@ void StarboardRenderer::CreatePlayerBridge() {
         surface_view_
 #endif  // BUILDFLAG(IS_ANDROID)
         ));
+#if BUILDFLAG(IS_IOS_TVOS)
   }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
   if (!player_bridge_->IsValid()) {
     error_message = player_bridge_->GetPlayerCreationErrorMessage();
@@ -731,19 +757,7 @@ void StarboardRenderer::CreatePlayerBridge() {
     return;
   }
 
-  if (!IsUrlPlayer()) {
-    // TODO(b/267678497): When `player_bridge_->GetAudioConfigurations()`
-    // returns no audio configurations, update the write durations again
-    // before the SbPlayer reaches `kSbPlayerStatePresenting`.
-    audio_write_duration_for_preroll_ = audio_write_duration_ =
-        HasRemoteAudioOutputs(player_bridge_->GetAudioConfigurations())
-            ? audio_write_duration_remote_
-            : audio_write_duration_local_;
-    LOG(INFO) << "SbPlayerBridge created, with audio write duration at "
-              << audio_write_duration_for_preroll_
-              << " and with max_video_capabilities_ at "
-              << max_video_capabilities_;
-  }
+  UpdateAudioWriteDuration();
 
   ApplyPendingBounds();
 
@@ -762,7 +776,15 @@ void StarboardRenderer::CreatePlayerBridge() {
       break;
   }
 
-  if (!IsUrlPlayer()) {
+#if BUILDFLAG(IS_IOS_TVOS)
+  if (IsUrlPlayer()) {
+    // URL player does not use demuxer streams; they must be null.
+    SB_DCHECK(!audio_stream_);
+    SB_DCHECK(!video_stream_);
+  } else {  // NOLINT(readability/braces)
+#else
+  {
+#endif  // BUILDFLAG(IS_IOS_TVOS)
     if (audio_stream_) {
       UpdateDecoderConfig(audio_stream_);
     }
@@ -932,10 +954,12 @@ void StarboardRenderer::OnNeedData(DemuxerStream::Type type,
     return;
   }
 
-  // URL player handles all buffering natively so ignore OnNeedData.
-  if (IsUrlPlayer()) {
-    return;
-  }
+#if BUILDFLAG(IS_IOS_TVOS)
+  // URL player handles all buffering natively; OnNeedData should never
+  // be called because SbUrlPlayerCreate does not take a decoder-status
+  // callback. This is defensive guard.
+  SB_DCHECK(!IsUrlPlayer());
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
   int max_buffers =
       std::min(max_number_of_buffers_to_write, max_samples_per_write_);
@@ -1063,17 +1087,12 @@ void StarboardRenderer::OnPlayerStatus(SbPlayerState state) {
           FROM_HERE,
           base::BindOnce(&StarboardRenderer::OnBufferingStateChange,
                          weak_factory_.GetWeakPtr(), buffering_state_));
-      if (IsUrlPlayer()) {
 #if BUILDFLAG(IS_IOS_TVOS)
+      if (IsUrlPlayer()) {
         OnUrlPlayerPresenting();
-#endif  // BUILDFLAG(IS_IOS_TVOS)
-      } else {
-        audio_write_duration_for_preroll_ = audio_write_duration_ =
-            HasRemoteAudioOutputs(player_bridge_->GetAudioConfigurations())
-                ? audio_write_duration_remote_
-                : audio_write_duration_local_;
-        LOG(INFO) << "Audio write duration is " << audio_write_duration_;
       }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+      UpdateAudioWriteDuration();
       break;
     case kSbPlayerStateEndOfStream:
       client_->OnEnded();

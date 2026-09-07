@@ -284,6 +284,8 @@ source_set("base") {
     "pipeline_status.h",
     "platform_features.cc",
     "platform_features.h",
+    "platform_init_data_types.cc",
+    "platform_init_data_types.h",
     "provision_fetcher.h",
     "ranges.cc",
     "ranges.h",

@@ -48,6 +48,10 @@ source_set("renderer") {
       deps += [ "//cobalt/internal/cobalt/components/cdm/renderer/starboard:platform_drm_key_system_info" ]
     }
   }
+
+  if (is_internal_build) {
+    deps += [ "//cobalt/internal/cobalt/components/cdm/renderer/starboard:platform_drm_key_system_info" ]
+  }
 }
 
 test("cobalt_renderer_unittests") {

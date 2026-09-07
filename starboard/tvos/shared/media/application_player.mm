@@ -18,6 +18,7 @@
 
 #include <limits>
 
+#include "cobalt/internal/starboard/shared/tvos/drm_system_fairplay_constants.h"
 #include "starboard/common/log.h"
 #include "starboard/media.h"
 #import "starboard/tvos/shared/defines.h"
@@ -721,9 +722,9 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
             [NSMutableData dataWithBytes:&urlStringDataLength
                                   length:sizeof(urlStringDataLength)];
         [initData appendData:urlStringData];
-        _encryptedMediaFunc(starboardPlayer, _playerContext, "fairplay",
-                            static_cast<const unsigned char*>(initData.bytes),
-                            initData.length);
+        _encryptedMediaFunc(
+            starboardPlayer, _playerContext, starboard::kFairplayInitDataType,
+            static_cast<const unsigned char*>(initData.bytes), initData.length);
       }
     }
   }

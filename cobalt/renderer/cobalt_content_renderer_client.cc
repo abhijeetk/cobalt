@@ -54,6 +54,7 @@
 #include "media/starboard/url_player_demuxer.h"
 #if defined(COBALT_INTERNAL_BUILD)
 #include "cobalt/internal/cobalt/components/cdm/renderer/starboard/platform_drm_key_system_info.h"
+#include "cobalt/internal/cobalt/components/cdm/renderer/starboard/platform_init_data_type_mapper.h"
 #endif  // defined(COBALT_INTERNAL_BUILD)
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
@@ -227,6 +228,11 @@ void CobaltContentRendererClient::RenderThreadStarted() {
   // Register h5vcc scheme for renders to use Fetch API.
   blink::WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
       blink::WebString::FromASCII(content::kH5vccEmbeddedScheme));
+
+#if BUILDFLAG(IS_IOS_TVOS) && defined(COBALT_INTERNAL_BUILD)
+  // Register platform-specific init data type mappings for DRM.
+  cobalt::internal::RegisterPlatformInitDataTypes();
+#endif  // BUILDFLAG(IS_IOS_TVOS) && defined(COBALT_INTERNAL_BUILD)
 }
 
 void AddStarboardCmaKeySystems(::media::KeySystemInfos* key_system_infos) {

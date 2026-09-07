@@ -45,9 +45,10 @@ typedef struct SbUrlPlayerExtraInfo {
 
 // Callback to queue an encrypted event for initialization data
 // encountered in media data. |init_data_type| should be a string
-// matching one of the EME initialization data types : "cenc",
-// "fairplay", "keyids", or "webm", |init_data| is the initialization
-// data, and |init_data_length| is the length of the data.
+// matching one of the EME initialization data types ("cenc", "keyids",
+// "webm") or a platform-specific type registered via
+// PlatformInitDataTypes. |init_data| is the initialization data,
+// and |init_data_length| is the length of the data.
 typedef void (*SbPlayerEncryptedMediaInitDataEncounteredCB)(
     SbPlayer player,
     void* context,

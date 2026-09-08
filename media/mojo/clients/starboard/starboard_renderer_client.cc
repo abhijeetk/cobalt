@@ -34,6 +34,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 #if BUILDFLAG(IS_IOS_TVOS)
+#include "media/base/platform_init_data_types.h"
 #include "url/gurl.h"
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
@@ -295,7 +296,19 @@ void StarboardRendererClient::OnEncryptedMediaInitDataEncountered(
     const std::string& init_data_type,
     const std::vector<uint8_t>& init_data) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  // TODO(b/498421484): Forward this to blink so the `encrypted` event fires.
+  if (!media_resource_) {
+    LOG(ERROR) << "[UrlPlayer] OnEncryptedMediaInitDataEncountered called "
+               << "without media_resource_";
+    return;
+  }
+  EmeInitDataType eme_type = PlatformInitDataTypes::ToEnum(init_data_type);
+  if (eme_type == EmeInitDataType::UNKNOWN) {
+    LOG(ERROR) << "[UrlPlayer] Unknown init data type: " << init_data_type;
+    return;
+  }
+  LOG(INFO) << "[UrlPlayer] Forwarding encrypted init data, type="
+            << init_data_type << " size=" << init_data.size();
+  media_resource_->ForwardEncryptedMediaInitData(eme_type, init_data);
 }
 
 void StarboardRendererClient::OnDurationChange(base::TimeDelta duration) {

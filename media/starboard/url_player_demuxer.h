@@ -22,6 +22,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/demuxer.h"
 #include "media/base/demuxer_stream.h"
@@ -92,6 +93,7 @@ class MEDIA_EXPORT UrlPlayerDemuxer : public Demuxer {
                                               base::TimeDelta length) override;
 
  private:
+  SEQUENCE_CHECKER(sequence_checker_);
   scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
   raw_ptr<DemuxerHost> host_ = nullptr;
   const GURL url_;

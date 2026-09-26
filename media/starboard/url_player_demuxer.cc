@@ -163,6 +163,7 @@ void UrlPlayerDemuxer::SetPlaybackRate(double rate) {}
 
 void UrlPlayerDemuxer::ForwardDurationChangeToDemuxerHost(
     base::TimeDelta duration) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (host_) {
     host_->SetDuration(duration);
   }
@@ -171,6 +172,7 @@ void UrlPlayerDemuxer::ForwardDurationChangeToDemuxerHost(
 void UrlPlayerDemuxer::ForwardBufferedTimeRangesToDemuxerHost(
     base::TimeDelta start,
     base::TimeDelta length) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (host_) {
     Ranges<base::TimeDelta> ranges;
     ranges.Add(start, start + length);

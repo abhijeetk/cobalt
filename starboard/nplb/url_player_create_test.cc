@@ -387,6 +387,38 @@ TEST_F(SbUrlPlayerPrepareTest, BackToBackSeeksPresentOnlyTheLastTicket) {
   EXPECT_NEAR(GetInfo().current_media_timestamp, kSecondTarget, 100'000);
 }
 
+TEST_F(SbUrlPlayerPrepareTest, VolumeAndRateSetBeforePrepareAreApplied) {
+  CreatePlayer(kFixturePath);
+  SbPlayerSetVolume(player_, 0.0);
+  SbPlayerSetPlaybackRate(player_, 0.5);
+  ASSERT_TRUE(recorder_.WaitForStatus(
+      kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
+  SbPlayerSeek(player_, 0, 1);
+  ASSERT_TRUE(
+      recorder_.WaitForStatus(kSbPlayerStatePresenting, 1, kSeekTimeout));
+
+  SbPlayerInfo info = GetInfo();
+  EXPECT_EQ(info.volume, 0.0);
+  EXPECT_EQ(info.playback_rate, 0.5);
+}
+
+TEST_F(SbUrlPlayerPrepareTest, RateSetBeforePrepareIsNotAppliedBeforeSeek) {
+  CreatePlayer(kFixturePath);
+  SbPlayerSetPlaybackRate(player_, 1.0);
+  ASSERT_TRUE(recorder_.WaitForStatus(
+      kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
+  const int64_t initialized_time = GetInfo().current_media_timestamp;
+  recorder_.Settle(kSettleTime);
+  EXPECT_EQ(GetInfo().current_media_timestamp, initialized_time);
+
+  SbPlayerSeek(player_, 0, 1);
+  ASSERT_TRUE(
+      recorder_.WaitForStatus(kSbPlayerStatePresenting, 1, kSeekTimeout));
+  const int64_t presenting_time = GetInfo().current_media_timestamp;
+  recorder_.Settle(kSettleTime);
+  EXPECT_GT(GetInfo().current_media_timestamp, presenting_time);
+}
+
 TEST_F(SbUrlPlayerPrepareTest, SeekBeforeInitializedReportsError) {
   if (SB_DCHECK_ENABLED) {
     GTEST_SKIP() << "SbPlayerSeek() before Initialized fails a DCHECK.";

@@ -85,12 +85,15 @@ enum HdcpProtectionState {
 @property(nonatomic, readonly) NSInteger currentMediaTime;
 
 /**
- *  @brief The rate of playback for this player.
+ *  @brief The rate of playback for this player. Set on the main thread;
+ *      it is applied to the @c AVPlayer when the first seek reaches
+ *      @c kSbPlayerStatePresenting.
  */
 @property(nonatomic) double playbackRate;
 
 /**
- *  @brief The volume of the player.
+ *  @brief The volume of the player. Set on the main thread; a volume set
+ *      before the @c AVPlayer exists is applied when it is created.
  */
 @property(nonatomic) double volume;
 

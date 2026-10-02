@@ -74,7 +74,8 @@ typedef void (*SbPlayerEncryptedMediaInitDataEncounteredCB)(
 // instead, e.g. with kSbUrlPlayerErrorSrcNotSupported. SbPlayerSeek() must not
 // be called before kSbPlayerStateInitialized is reported; in release builds
 // such a seek is dropped and |player_error_func| is called with
-// kSbPlayerErrorDecode.
+// kSbPlayerErrorDecode. A playback rate set before the first seek is applied
+// when that seek reaches kSbPlayerStatePresenting.
 SbPlayer SbUrlPlayerCreate(const char* url,
                            SbWindow window,
                            SbPlayerStatusFunc player_status_func,

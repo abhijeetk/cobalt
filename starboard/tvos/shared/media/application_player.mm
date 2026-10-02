@@ -218,6 +218,20 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
    *  @brief Indicates that the output doesn't have hdcp protection.
    */
   bool _insufficientExternalProtection;
+
+  /**
+   *  @brief The volume and rate last set. The volume is applied when
+   *      @c _player is created, the rate when the first seek reaches
+   *      @c kSbPlayerStatePresenting. Only accessed on the main thread.
+   */
+  double _volume;
+  double _playbackRate;
+
+  /**
+   *  @brief Indicates that a seek has reached @c kSbPlayerStatePresenting.
+   *      Only accessed on the main thread.
+   */
+  BOOL _presentingReported;
 }
 
 @synthesize totalDroppedFrames = _totalDroppedFrames;
@@ -242,6 +256,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
     _errorOccurred = false;
     _playerShouldPause = false;
     _insufficientExternalProtection = false;
+    _volume = 1.0;
+    _playbackRate = 0.0;
 
     CGRect frame = [UIScreen mainScreen].bounds;
     _playerView = [[SBDPlayerView alloc] initWithFrame:frame];
@@ -364,6 +380,7 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
            object:playerItem];
 
   _player = [AVPlayer playerWithPlayerItem:playerItem];
+  _player.volume = _volume;
 
   [_player addObserver:self
             forKeyPath:@"status"
@@ -565,10 +582,13 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)setPlaybackRate:(double)playbackRate {
-  if (_player.rate == playbackRate) {
-    return;
-  }
-  _player.rate = playbackRate;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->_playbackRate = playbackRate;
+    if (!self->_presentingReported || self->_player.rate == playbackRate) {
+      return;
+    }
+    self->_player.rate = playbackRate;
+  });
 }
 
 - (NSInteger)totalDroppedFrames {
@@ -580,7 +600,10 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)setVolume:(double)volume {
-  _player.volume = volume;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->_volume = volume;
+    self->_player.volume = volume;
+  });
 }
 
 - (NSInteger)currentMediaTime {
@@ -643,6 +666,10 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
           SBDApplicationPlayer* strongSelf = weakSelf;
           if (!strongSelf || strongSelf->_ticket != ticket) {
             return;
+          }
+          if (!strongSelf->_presentingReported) {
+            strongSelf->_presentingReported = YES;
+            strongSelf->_player.rate = strongSelf->_playbackRate;
           }
           [strongSelf updatePlayerState:kSbPlayerStatePresenting ticket:ticket];
         });

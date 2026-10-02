@@ -14,8 +14,10 @@
 
 #include "media/starboard/starboard_renderer.h"
 
+#include <limits>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/functional/bind.h"
@@ -130,9 +132,17 @@ class StarboardRendererTest : public testing::Test {
   }
 
 #if BUILDFLAG(IS_IOS_TVOS)
-  // Creates a URL player whose GetInfo() reports |url_player_info_|.
+  // Creates a URL player whose GetInfo() reports |url_player_info_|. GetInfo(),
+  // init_cb, duration and client calls are appended to |events_|.
   SbPlayer InitializeUrlPlayer() {
     renderer_->SetSourceUrl("https://example.com/master.m3u8");
+    renderer_->SetDurationChangeCB(base::BindRepeating(
+        [](std::vector<std::string>* events,
+           std::optional<base::TimeDelta>* reported, base::TimeDelta duration) {
+          events->push_back("duration");
+          *reported = duration;
+        },
+        &events_, &reported_duration_));
 
     SbPlayer player = reinterpret_cast<SbPlayer>(new MockSbPlayer());
     EXPECT_CALL(mock_sbplayer_interface_, CreateUrlPlayer(_, _, _, _, _, _))
@@ -144,9 +154,23 @@ class StarboardRendererTest : public testing::Test {
     EXPECT_CALL(mock_sbplayer_interface_, GetInfo(player, _))
         .Times(AnyNumber())
         .WillRepeatedly(Invoke([this](SbPlayer, SbPlayerInfo* out_info) {
+          events_.push_back("GetInfo");
           *out_info = url_player_info_;
         }));
-    EXPECT_CALL(renderer_init_cb_, Run(_)).WillOnce(SaveArg<0>(&init_status_));
+    EXPECT_CALL(renderer_init_cb_, Run(_))
+        .WillOnce(Invoke([this](PipelineStatus status) {
+          events_.push_back("init_cb");
+          init_status_ = status;
+        }));
+    ON_CALL(renderer_client_, OnBufferingStateChange(_, _))
+        .WillByDefault(
+            Invoke([this](BufferingState, BufferingStateChangeReason) {
+              events_.push_back("client.OnBufferingStateChange");
+            }));
+    ON_CALL(renderer_client_, OnVideoNaturalSizeChange(_))
+        .WillByDefault(Invoke([this](const gfx::Size&) {
+          events_.push_back("client.OnVideoNaturalSizeChange");
+        }));
 
     renderer_->Initialize(&media_resource_, &renderer_client_,
                           renderer_init_cb_.Get());
@@ -169,8 +193,37 @@ class StarboardRendererTest : public testing::Test {
     task_environment_.RunUntilIdle();
   }
 
+  // Returns the index of the first |event| in |events_|, or -1.
+  int IndexOfEvent(const std::string& event) const {
+    for (size_t i = 0; i < events_.size(); ++i) {
+      if (events_[i] == event) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  }
+
+  // Reports Initialized with |duration_us| and returns the duration pushed
+  // before init_cb, if any.
+  std::optional<base::TimeDelta> DurationPushedBeforeInitCb(
+      int64_t duration_us) {
+    SetUrlPlayerInfo(duration_us);
+    SbPlayer player = InitializeUrlPlayer();
+    events_.clear();
+    ReportUrlPlayerInitialized(player);
+    EXPECT_TRUE(init_status_.has_value());
+    const int duration_index = IndexOfEvent("duration");
+    const int init_index = IndexOfEvent("init_cb");
+    if (duration_index < 0 || init_index < 0 || duration_index > init_index) {
+      return std::nullopt;
+    }
+    return reported_duration_;
+  }
+
   SbPlayerInfo url_player_info_ = {};
+  std::vector<std::string> events_;
   std::optional<PipelineStatus> init_status_;
+  std::optional<base::TimeDelta> reported_duration_;
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
   base::test::TaskEnvironment task_environment_;
@@ -523,6 +576,65 @@ TEST_F(StarboardRendererTest,
 
 #if BUILDFLAG(IS_IOS_TVOS)
 constexpr int64_t kUrlPlayerVodDurationUs = 10966705000;
+
+TEST_F(StarboardRendererTest, UrlPlayerInitCbWaitsForInitialized) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  EXPECT_FALSE(init_status_.has_value());
+
+  ReportUrlPlayerInitialized(player);
+  ASSERT_TRUE(init_status_.has_value());
+  EXPECT_TRUE(init_status_->is_ok());
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerReadsMetadataBeforeInitCb) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  events_.clear();
+
+  ReportUrlPlayerInitialized(player);
+  const int get_info_index = IndexOfEvent("GetInfo");
+  const int init_index = IndexOfEvent("init_cb");
+  ASSERT_GE(init_index, 0);
+  EXPECT_GE(get_info_index, 0);
+  EXPECT_LT(get_info_index, init_index);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerPushesVodDurationBeforeInitCb) {
+  EXPECT_EQ(DurationPushedBeforeInitCb(kUrlPlayerVodDurationUs),
+            base::Microseconds(kUrlPlayerVodDurationUs));
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerMapsZeroDurationToInfinite) {
+  EXPECT_EQ(DurationPushedBeforeInitCb(0), kInfiniteDuration);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerMapsNoDurationToInfinite) {
+  EXPECT_EQ(DurationPushedBeforeInitCb(SB_PLAYER_NO_DURATION),
+            kInfiniteDuration);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerMapsNegativeDurationToInfinite) {
+  EXPECT_EQ(DurationPushedBeforeInitCb(-5'000'000), kInfiniteDuration);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerMapsLiveDurationToInfinite) {
+  EXPECT_EQ(DurationPushedBeforeInitCb(std::numeric_limits<int64_t>::max()),
+            kInfiniteDuration);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerNoClientCallsBeforeInitCb) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  ReportUrlPlayerInitialized(player);
+  ASSERT_TRUE(init_status_.has_value());
+
+  const int init_index = IndexOfEvent("init_cb");
+  const int buffering_index = IndexOfEvent("client.OnBufferingStateChange");
+  const int size_index = IndexOfEvent("client.OnVideoNaturalSizeChange");
+  EXPECT_TRUE(buffering_index < 0 || buffering_index > init_index);
+  EXPECT_TRUE(size_index < 0 || size_index > init_index);
+}
 
 TEST_F(StarboardRendererTest, UrlPlayerSrcNotSupportedBeforeInitRunsInitCb) {
   SbPlayer player = InitializeUrlPlayer();

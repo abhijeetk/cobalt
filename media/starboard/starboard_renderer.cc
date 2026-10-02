@@ -648,11 +648,21 @@ void StarboardRenderer::OnUrlPlayerInitialized() {
   SbPlayerBridge::PlayerInfo info{nullptr, nullptr, nullptr,
                                   nullptr, nullptr, &duration};
   player_bridge_->GetInfo(&info);
+  int width = 0, height = 0;
+  player_bridge_->GetVideoResolution(&width, &height);
+  LOG(INFO) << "URL player metadata at Initialized: duration=" << duration
+            << ", size=" << width << "x" << height;
 
   // Keep the raw value so that GetMediaTime() doesn't push it again.
   last_duration_ = duration;
-  if (duration_change_cb_) {
-    duration_change_cb_.Run(MapUrlPlayerDuration(duration));
+  // The size isn't stored, so that the video hole is painted at Presenting.
+  UrlPlayerMetadata metadata;
+  metadata.duration = MapUrlPlayerDuration(duration);
+  if (width > 0 && height > 0) {
+    metadata.natural_size = gfx::Size(width, height);
+  }
+  if (url_player_metadata_cb_) {
+    url_player_metadata_cb_.Run(metadata);
   }
 }
 

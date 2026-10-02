@@ -40,6 +40,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
+#if BUILDFLAG(IS_IOS_TVOS)
+#include "media/base/starboard/url_player_media_resource.h"
+#include "url/gurl.h"
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+
 namespace media {
 
 using ::testing::_;
@@ -53,6 +58,10 @@ struct FakeMojomRendererCallRecord {
   bool initialize_with_bypass_bridge_called = false;
   uint32_t last_bypass_bridge_id = 0;
   std::optional<size_t> last_stream_count;
+#if BUILDFLAG(IS_IOS_TVOS)
+  std::optional<std::string> last_url;
+  bool initialize_with_url_result = true;
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 };
 
 class FakeMojomRenderer : public mojom::Renderer {
@@ -112,7 +121,15 @@ class FakeStarboardRendererExtension
   void OnGpuChannelTokenReady(
       mojom::CommandBufferIdPtr command_buffer_id) override {}
 #if BUILDFLAG(IS_IOS_TVOS)
-  void SetSourceUrl(const std::string& source_url) override {}
+  void InitializeWithUrl(const std::string& url,
+                         InitializeWithUrlCallback cb) override {
+    bool result = true;
+    if (record_) {
+      record_->last_url = url;
+      result = record_->initialize_with_url_result;
+    }
+    std::move(cb).Run(result);
+  }
 #endif  // BUILDFLAG(IS_IOS_TVOS)
  private:
   FakeMojomRendererCallRecord* record_ = nullptr;
@@ -147,6 +164,51 @@ class MockRendererClientStarboard : public RendererClient {
   MOCK_METHOD1(OnVideoFrameRateChange, void(std::optional<int>));
   MOCK_METHOD0(IsVideoStreamAvailable, bool());
 };
+
+#if BUILDFLAG(IS_IOS_TVOS)
+constexpr char kUrlPlayerUrl[] = "https://example.com/master.m3u8";
+
+// The URL player demuxer, as seen by the client. Appends "metadata" to
+// |events| when the platform metadata arrives.
+class FakeUrlPlayerMediaResource : public FakeMediaResource,
+                                   public UrlPlayerMediaResource {
+ public:
+  explicit FakeUrlPlayerMediaResource(
+      std::vector<std::string>* events = nullptr)
+      : FakeMediaResource(1, 1, false), events_(events) {}
+
+  // MediaResource implementation.
+  UrlPlayerMediaResource* AsUrlPlayerMediaResource() override { return this; }
+
+  // UrlPlayerMediaResource implementation.
+  GURL GetMediaUrl() const override { return GURL(kUrlPlayerUrl); }
+  void OnPlatformMetadata(const UrlPlayerMetadata& metadata) override {
+    metadata_ = metadata;
+    if (events_) {
+      events_->push_back("metadata");
+    }
+  }
+  void OnPlatformDurationChange(base::TimeDelta duration) override {}
+  void OnPlatformBufferedRangesChange(base::TimeDelta start,
+                                      base::TimeDelta length) override {}
+  void OnPlatformEncryptedMediaInitData(
+      EmeInitDataType init_data_type,
+      const std::vector<uint8_t>& init_data) override {}
+  void SetEncryptedMediaInitDataCB(
+      Demuxer::EncryptedMediaInitDataCB cb) override {}
+
+  const std::optional<UrlPlayerMetadata>& metadata() const { return metadata_; }
+
+ private:
+  const raw_ptr<std::vector<std::string>> events_;
+  std::optional<UrlPlayerMetadata> metadata_;
+};
+
+mojom::UrlPlayerMetadataPtr CreateUrlPlayerMetadata() {
+  return mojom::UrlPlayerMetadata::New(base::Seconds(10966),
+                                       gfx::Size(1920, 1080));
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 class StarboardRendererClientTest : public ::testing::Test {
  protected:
@@ -437,6 +499,110 @@ TEST_F(StarboardRendererClientTest,
       StarboardRenderingMode::kDecodeToTexture);
   task_environment_.RunUntilIdle();
 }
+
+#if BUILDFLAG(IS_IOS_TVOS)
+TEST_F(StarboardRendererClientTest,
+       UrlPlayerInitializesMojoRendererWithoutStreams) {
+  FakeUrlPlayerMediaResource url_resource;
+  InitializeStarboardRendererClient();
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         base::DoNothing());
+  starboard_renderer_client_->UpdateStarboardRenderingMode(
+      StarboardRenderingMode::kPunchOut);
+  task_environment_.RunUntilIdle();
+
+  EXPECT_EQ(fake_mojom_renderer_record_.last_url,
+            std::optional<std::string>(kUrlPlayerUrl));
+  EXPECT_EQ(fake_mojom_renderer_record_.last_stream_count,
+            std::optional<size_t>(0));
+}
+
+TEST_F(StarboardRendererClientTest,
+       UrlPlayerRendererInitializeWaitsForUrlHandoffReply) {
+  FakeUrlPlayerMediaResource url_resource;
+  mojo::PendingRemote<mojom::Renderer> renderer_remote;
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<FakeMojomRenderer>(&fake_mojom_renderer_record_),
+      renderer_remote.InitWithNewPipeAndPassReceiver());
+
+  // Not bound until later, so the URL handoff isn't answered yet.
+  mojo::PendingRemote<mojom::StarboardRendererExtension> extension_remote;
+  auto extension_receiver = extension_remote.InitWithNewPipeAndPassReceiver();
+
+  mojo::PendingRemote<media::mojom::StarboardRendererClientExtension>
+      client_extension_remote;
+  auto client_extension_receiver =
+      client_extension_remote.InitWithNewPipeAndPassReceiver();
+  auto mojo_renderer = std::make_unique<MojoRenderer>(
+      task_environment_.GetMainThreadTaskRunner(),
+      /*video_overlay_factory=*/nullptr,
+      /*video_renderer_sink=*/nullptr, std::move(renderer_remote));
+  auto client = std::make_unique<StarboardRendererClient>(
+      task_environment_.GetMainThreadTaskRunner(), media_log_.Clone(),
+      std::move(mojo_renderer), std::make_unique<VideoOverlayFactory>(),
+      &mock_video_renderer_sink_, std::move(extension_remote),
+      std::move(client_extension_receiver),
+      base::BindRepeating([]() -> uint64_t { return 0; }),
+      mock_gpu_factories_.get());
+
+  EXPECT_CALL(renderer_init_cb_, Run(_)).Times(0);
+  client->Initialize(&url_resource, &renderer_client_, renderer_init_cb_.Get());
+  client->UpdateStarboardRenderingMode(StarboardRenderingMode::kPunchOut);
+  task_environment_.RunUntilIdle();
+
+  EXPECT_FALSE(fake_mojom_renderer_record_.last_stream_count.has_value())
+      << "Renderer.Initialize was sent before the URL handoff was answered";
+  EXPECT_TRUE(::testing::Mock::VerifyAndClearExpectations(&renderer_init_cb_));
+
+  EXPECT_CALL(renderer_init_cb_, Run(HasStatusCode(PIPELINE_OK)));
+  mojo::MakeSelfOwnedReceiver(std::make_unique<FakeStarboardRendererExtension>(
+                                  &fake_mojom_renderer_record_),
+                              std::move(extension_receiver));
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(fake_mojom_renderer_record_.last_stream_count,
+            std::optional<size_t>(0));
+}
+
+TEST_F(StarboardRendererClientTest,
+       UrlPlayerInitializeWithUrlFailureRunsInitCb) {
+  FakeUrlPlayerMediaResource url_resource;
+  fake_mojom_renderer_record_.initialize_with_url_result = false;
+  InitializeStarboardRendererClient();
+
+  EXPECT_CALL(renderer_init_cb_,
+              Run(HasStatusCode(PIPELINE_ERROR_INITIALIZATION_FAILED)));
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         renderer_init_cb_.Get());
+  task_environment_.RunUntilIdle();
+  EXPECT_FALSE(fake_mojom_renderer_record_.last_stream_count.has_value());
+}
+
+TEST_F(StarboardRendererClientTest,
+       UrlPlayerInitializeErrorRunsInitCbWithoutMetadataOrMode) {
+  FakeUrlPlayerMediaResource url_resource;
+  InitializeStarboardRendererClient(/*with_gpu_factories=*/true,
+                                    /*bypass_mojo_for_media=*/false,
+                                    /*mojo_initialize_result=*/false);
+
+  EXPECT_CALL(renderer_init_cb_,
+              Run(HasStatusCode(PIPELINE_ERROR_INITIALIZATION_FAILED)));
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         renderer_init_cb_.Get());
+  task_environment_.RunUntilIdle();
+}
+
+TEST_F(StarboardRendererClientTest, UrlPlayerMetadataReachesMediaResource) {
+  FakeUrlPlayerMediaResource url_resource;
+  InitializeStarboardRendererClient();
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         base::DoNothing());
+  starboard_renderer_client_->OnUrlPlayerMetadata(CreateUrlPlayerMetadata());
+
+  ASSERT_TRUE(url_resource.metadata());
+  EXPECT_EQ(url_resource.metadata()->duration, base::Seconds(10966));
+  EXPECT_EQ(url_resource.metadata()->natural_size, gfx::Size(1920, 1080));
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 }  // namespace
 

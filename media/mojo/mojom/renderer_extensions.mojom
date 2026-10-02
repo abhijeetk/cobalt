@@ -65,6 +65,15 @@ interface MediaFoundationRendererClientExtension {
     gfx.mojom.Size size, mojo_base.mojom.TimeDelta timestamp);
 };
 
+[EnableIf=is_ios]
+// Metadata of a prepared URL player resource.
+struct UrlPlayerMetadata {
+  // Infinite for live or unknown durations; never zero.
+  mojo_base.mojom.TimeDelta duration;
+  // Empty if not known yet.
+  gfx.mojom.Size natural_size;
+};
+
 [EnableIf=use_starboard_media]
 // This interface is for StarboardRendererClient to extend
 // mojo:RendererClient as StarboardRendererClient to allow
@@ -93,6 +102,11 @@ interface StarboardRendererClientExtension {
   // URL player buffered ranges forwarding.
   OnBufferedTimeRangesChange(mojo_base.mojom.TimeDelta start,
                              mojo_base.mojom.TimeDelta length);
+
+  [EnableIf=is_ios]
+  // URL player metadata, sent before the GPU renderer's init callback runs.
+  // It is not ordered with the Renderer Initialize() reply.
+  OnUrlPlayerMetadata(UrlPlayerMetadata metadata);
 
   [EnableIf=is_android]
   // Request OverlayInfo from StarboardRendererClient.
@@ -166,8 +180,9 @@ interface StarboardRendererExtension {
   InitializeWithBypassBridge(uint32 bypass_bridge_id) => (bool success);
 
   [EnableIf=is_ios]
-  // Pass source URL for URL player.
-  SetSourceUrl(string source_url);
+  // Pass the source URL for URL player. Renderer Initialize() must be called
+  // only after the reply.
+  InitializeWithUrl(string url) => (bool success);
 
   [EnableIf=is_android]
   // Notify StarboardRendererWrapper when the current OverlayInfo changes.

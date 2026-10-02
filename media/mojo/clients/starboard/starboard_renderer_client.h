@@ -123,6 +123,7 @@ class MEDIA_EXPORT StarboardRendererClient
   void OnDurationChange(base::TimeDelta duration) override;
   void OnBufferedTimeRangesChange(base::TimeDelta start,
                                   base::TimeDelta length) override;
+  void OnUrlPlayerMetadata(mojom::UrlPlayerMetadataPtr metadata) override;
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 #if BUILDFLAG(IS_ANDROID)
   void RequestOverlayInfo(bool restart_for_transitions) override;
@@ -145,6 +146,11 @@ class MEDIA_EXPORT StarboardRendererClient
                                     RendererClient* client,
                                     PipelineStatusCallback init_cb,
                                     bool success);
+#if BUILDFLAG(IS_IOS_TVOS)
+  void OnExtensionUrlInitialized(RendererClient* client,
+                                 PipelineStatusCallback init_cb,
+                                 bool success);
+#endif  // BUILDFLAG(IS_IOS_TVOS)
   void InitAndConstructMojoRenderer(mojom::CommandBufferIdPtr command_buffer_id,
                                     base::OnceClosure complete_cb);
   bool AreMojoPipesConnected() const {

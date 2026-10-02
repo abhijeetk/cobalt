@@ -133,16 +133,17 @@ class StarboardRendererTest : public testing::Test {
 
 #if BUILDFLAG(IS_IOS_TVOS)
   // Creates a URL player whose GetInfo() reports |url_player_info_|. GetInfo(),
-  // init_cb, duration and client calls are appended to |events_|.
+  // init_cb, metadata and client calls are appended to |events_|.
   SbPlayer InitializeUrlPlayer() {
     renderer_->SetSourceUrl("https://example.com/master.m3u8");
-    renderer_->SetDurationChangeCB(base::BindRepeating(
+    renderer_->SetUrlPlayerMetadataCB(base::BindRepeating(
         [](std::vector<std::string>* events,
-           std::optional<base::TimeDelta>* reported, base::TimeDelta duration) {
-          events->push_back("duration");
-          *reported = duration;
+           std::optional<UrlPlayerMetadata>* reported,
+           const UrlPlayerMetadata& metadata) {
+          events->push_back("metadata");
+          *reported = metadata;
         },
-        &events_, &reported_duration_));
+        &events_, &reported_metadata_));
 
     SbPlayer player = reinterpret_cast<SbPlayer>(new MockSbPlayer());
     EXPECT_CALL(mock_sbplayer_interface_, CreateUrlPlayer(_, _, _, _, _, _))
@@ -203,27 +204,37 @@ class StarboardRendererTest : public testing::Test {
     return -1;
   }
 
-  // Reports Initialized with |duration_us| and returns the duration pushed
+  // Reports Initialized with |duration_us| and returns the metadata pushed
   // before init_cb, if any.
-  std::optional<base::TimeDelta> DurationPushedBeforeInitCb(
+  std::optional<UrlPlayerMetadata> MetadataPushedBeforeInitCb(
       int64_t duration_us) {
     SetUrlPlayerInfo(duration_us);
     SbPlayer player = InitializeUrlPlayer();
     events_.clear();
     ReportUrlPlayerInitialized(player);
     EXPECT_TRUE(init_status_.has_value());
-    const int duration_index = IndexOfEvent("duration");
+    const int metadata_index = IndexOfEvent("metadata");
     const int init_index = IndexOfEvent("init_cb");
-    if (duration_index < 0 || init_index < 0 || duration_index > init_index) {
+    if (metadata_index < 0 || init_index < 0 || metadata_index > init_index) {
       return std::nullopt;
     }
-    return reported_duration_;
+    return reported_metadata_;
+  }
+
+  std::optional<base::TimeDelta> DurationPushedBeforeInitCb(
+      int64_t duration_us) {
+    std::optional<UrlPlayerMetadata> metadata =
+        MetadataPushedBeforeInitCb(duration_us);
+    if (!metadata) {
+      return std::nullopt;
+    }
+    return metadata->duration;
   }
 
   SbPlayerInfo url_player_info_ = {};
   std::vector<std::string> events_;
   std::optional<PipelineStatus> init_status_;
-  std::optional<base::TimeDelta> reported_duration_;
+  std::optional<UrlPlayerMetadata> reported_metadata_;
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
   base::test::TaskEnvironment task_environment_;
@@ -635,6 +646,51 @@ TEST_F(StarboardRendererTest, UrlPlayerMapsNegativeDurationToInfinite) {
 TEST_F(StarboardRendererTest, UrlPlayerMapsLiveDurationToInfinite) {
   EXPECT_EQ(DurationPushedBeforeInitCb(std::numeric_limits<int64_t>::max()),
             kInfiniteDuration);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerPushesNaturalSizeBeforeInitCb) {
+  std::optional<UrlPlayerMetadata> metadata =
+      MetadataPushedBeforeInitCb(kUrlPlayerVodDurationUs);
+  ASSERT_TRUE(metadata);
+  EXPECT_EQ(metadata->natural_size, gfx::Size(1920, 1080));
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerPushesEmptySizeWhenUnknown) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  url_player_info_.frame_width = 0;
+  url_player_info_.frame_height = 0;
+  SbPlayer player = InitializeUrlPlayer();
+  ReportUrlPlayerInitialized(player);
+
+  ASSERT_TRUE(reported_metadata_);
+  EXPECT_TRUE(reported_metadata_->natural_size.IsEmpty());
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerPushesMetadataOnce) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  ReportUrlPlayerInitialized(player);
+
+  int metadata_count = 0;
+  for (const std::string& event : events_) {
+    metadata_count += event == "metadata";
+  }
+  EXPECT_EQ(metadata_count, 1);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerReportsSizeToClientAtPresenting) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  ReportUrlPlayerInitialized(player);
+  ASSERT_TRUE(init_status_.has_value());
+
+  EXPECT_CALL(mock_sbplayer_interface_, SetPlaybackRate(player, _))
+      .Times(AnyNumber());
+  EXPECT_CALL(renderer_client_,
+              OnVideoNaturalSizeChange(gfx::Size(1920, 1080)));
+  player_status_cb_(player, context_, kSbPlayerStatePresenting,
+                    SB_PLAYER_INITIAL_TICKET);
+  task_environment_.RunUntilIdle();
 }
 
 TEST_F(StarboardRendererTest, UrlPlayerNoClientCallsBeforeInitCb) {

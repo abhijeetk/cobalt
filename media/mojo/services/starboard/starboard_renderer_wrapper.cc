@@ -258,6 +258,9 @@ void StarboardRendererWrapper::Initialize(MediaResource* media_resource,
   GetRenderer()->SetEncryptedMediaInitDataCB(
       base::BindRepeating(&StarboardRendererWrapper::OnEncryptedMediaInitData,
                           weak_factory_.GetWeakPtr()));
+  GetRenderer()->SetUrlPlayerMetadataCB(
+      base::BindRepeating(&StarboardRendererWrapper::OnUrlPlayerMetadata,
+                          weak_factory_.GetWeakPtr()));
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
   base::ScopedClosureRunner scoped_init_cb(
@@ -528,9 +531,17 @@ void StarboardRendererWrapper::InitializeWithBypassBridge(
 }
 
 #if BUILDFLAG(IS_IOS_TVOS)
-void StarboardRendererWrapper::SetSourceUrl(const std::string& source_url) {
+void StarboardRendererWrapper::InitializeWithUrl(
+    const std::string& url,
+    InitializeWithUrlCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  GetRenderer()->SetSourceUrl(source_url);
+  if (url.empty()) {
+    LOG(ERROR) << "[UrlPlayer] " << __func__ << ": Empty source URL.";
+    std::move(callback).Run(false);
+    return;
+  }
+  GetRenderer()->SetSourceUrl(url);
+  std::move(callback).Run(true);
 }
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
@@ -657,6 +668,13 @@ void StarboardRendererWrapper::OnBufferedTimeRangesChange(
     base::TimeDelta length) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   client_extension_remote_->OnBufferedTimeRangesChange(start, length);
+}
+
+void StarboardRendererWrapper::OnUrlPlayerMetadata(
+    const UrlPlayerMetadata& metadata) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  client_extension_remote_->OnUrlPlayerMetadata(
+      mojom::UrlPlayerMetadata::New(metadata.duration, metadata.natural_size));
 }
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 

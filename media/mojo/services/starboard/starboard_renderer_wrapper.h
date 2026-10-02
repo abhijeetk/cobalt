@@ -108,7 +108,8 @@ class StarboardRendererWrapper
       uint32_t bypass_bridge_id,
       InitializeWithBypassBridgeCallback callback) override;
 #if BUILDFLAG(IS_IOS_TVOS)
-  void SetSourceUrl(const std::string& source_url) override;
+  void InitializeWithUrl(const std::string& url,
+                         InitializeWithUrlCallback callback) override;
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 #if BUILDFLAG(IS_ANDROID)
   void OnOverlayInfoChanged(const OverlayInfo& overlay_info) override;
@@ -147,6 +148,7 @@ class StarboardRendererWrapper
   void OnDurationChange(base::TimeDelta duration);
   void OnBufferedTimeRangesChange(base::TimeDelta start,
                                   base::TimeDelta length);
+  void OnUrlPlayerMetadata(const UrlPlayerMetadata& metadata);
 #endif  // BUILDFLAG(IS_IOS_TVOS)
   void OnSubscribeToVideoGeometryChange(MediaResource* media_resource,
                                         RendererClient* client);

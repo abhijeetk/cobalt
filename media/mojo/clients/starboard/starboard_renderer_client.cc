@@ -341,6 +341,18 @@ void StarboardRendererClient::OnBufferedTimeRangesChange(
     url_resource_->OnPlatformBufferedRangesChange(start, length);
   }
 }
+
+void StarboardRendererClient::OnUrlPlayerMetadata(
+    mojom::UrlPlayerMetadataPtr metadata) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  if (!url_resource_) {
+    LOG(ERROR) << "[UrlPlayer] OnUrlPlayerMetadata called without "
+               << "url_resource_";
+    return;
+  }
+  url_resource_->OnPlatformMetadata(
+      {metadata->duration, metadata->natural_size});
+}
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
 #if BUILDFLAG(IS_ANDROID)
@@ -452,7 +464,16 @@ void StarboardRendererClient::InitializeMojoRenderer(
 
 #if BUILDFLAG(IS_IOS_TVOS)
   if (is_url_player) {
-    renderer_extension_->SetSourceUrl(url_resource_->GetMediaUrl().spec());
+    // Renderer Initialize() is sent from the reply, so that the URL is known
+    // on the GPU side first.
+    renderer_extension_->InitializeWithUrl(
+        url_resource_->GetMediaUrl().spec(),
+        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+            base::BindOnce(&StarboardRendererClient::OnExtensionUrlInitialized,
+                           weak_factory_.GetWeakPtr(), client,
+                           std::move(init_cb)),
+            false));
+    return;
   }
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
@@ -499,6 +520,24 @@ void StarboardRendererClient::OnExtensionBypassInitialized(
       bypass_bridge_ ? empty_media_resource.get() : media_resource, client,
       std::move(init_cb));
 }
+
+#if BUILDFLAG(IS_IOS_TVOS)
+void StarboardRendererClient::OnExtensionUrlInitialized(
+    RendererClient* client,
+    PipelineStatusCallback init_cb,
+    bool success) {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  if (!success) {
+    LOG(ERROR) << "[UrlPlayer] InitializeWithUrl failed.";
+    std::move(init_cb).Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
+    return;
+  }
+  // The platform player loads the URL itself, so no stream is sent.
+  static base::NoDestructor<EmptyMediaResource> empty_media_resource;
+  MojoRendererWrapper::Initialize(empty_media_resource.get(), client,
+                                  std::move(init_cb));
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 void StarboardRendererClient::InitAndConstructMojoRenderer(
     media::mojom::CommandBufferIdPtr command_buffer_id,

@@ -34,14 +34,23 @@
 #include "media/mojo/common/starboard/mojo_renderer_bypass_bridge.h"
 #include "media/mojo/mojom/renderer_extensions.mojom.h"
 #include "starboard/decode_target.h"
+
+#if BUILDFLAG(IS_IOS_TVOS)
+#include "media/mojo/common/starboard/empty_media_resource.h"
+#include "media/starboard/mock_sbplayer_interface.h"
+#include "media/starboard/sbplayer_interface.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::base::test::RunOnceCallback;
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::Return;
+using ::testing::SaveArg;
 using ::testing::StrictMock;
 
 namespace media {
@@ -173,6 +182,30 @@ class MockStarboardGpuFactory : public StarboardGpuFactory {
  private:
   void OnWillDestroyStub(bool have_context) override {}
 };
+
+#if BUILDFLAG(IS_IOS_TVOS)
+class FakeStarboardRendererClientExtension
+    : public mojom::StarboardRendererClientExtension {
+ public:
+  void PaintVideoHoleFrame(const gfx::Size& size) override {}
+  void UpdateStarboardRenderingMode(StarboardRenderingMode mode) override {}
+  void GetSbWindowHandle() override {}
+  void OnEncryptedMediaInitDataEncountered(
+      const std::string& init_data_type,
+      const std::vector<uint8_t>& init_data) override {}
+  void OnDurationChange(base::TimeDelta duration) override {}
+  void OnBufferedTimeRangesChange(base::TimeDelta start,
+                                  base::TimeDelta length) override {}
+  void OnUrlPlayerMetadata(mojom::UrlPlayerMetadataPtr metadata) override {
+    metadata_ = std::move(metadata);
+  }
+
+  const mojom::UrlPlayerMetadataPtr& metadata() const { return metadata_; }
+
+ private:
+  mojom::UrlPlayerMetadataPtr metadata_;
+};
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 class StarboardRendererWrapperTest : public testing::Test {
  protected:
@@ -507,6 +540,73 @@ TEST_F(StarboardRendererWrapperTest, TimerLifecycle) {
   renderer_wrapper_->Flush(flush_cb.Get());
   task_environment_.RunUntilIdle();
 }
+
+#if BUILDFLAG(IS_IOS_TVOS)
+constexpr char kUrlPlayerUrl[] = "https://example.com/master.m3u8";
+
+TEST_F(StarboardRendererWrapperTest, InitializeWithUrlRepliesTrue) {
+  base::MockOnceCallback<void(bool)> url_init_cb;
+  EXPECT_CALL(url_init_cb, Run(true));
+  renderer_wrapper_->InitializeWithUrl(kUrlPlayerUrl, url_init_cb.Get());
+}
+
+TEST_F(StarboardRendererWrapperTest, InitializeWithEmptyUrlRepliesFalse) {
+  base::MockOnceCallback<void(bool)> url_init_cb;
+  EXPECT_CALL(url_init_cb, Run(false));
+  renderer_wrapper_->InitializeWithUrl(std::string(), url_init_cb.Get());
+}
+
+TEST_F(StarboardRendererWrapperTest,
+       InitializeWithUrlCreatesUrlPlayerAndForwardsMetadata) {
+  FakeStarboardRendererClientExtension fake_client_extension;
+  mojo::Receiver<mojom::StarboardRendererClientExtension>
+      client_extension_receiver(&fake_client_extension,
+                                std::move(client_extension_));
+
+  NiceMock<MockSbPlayerInterface> sbplayer_interface;
+  ScopedSbPlayerInterfaceForTesting scoped_sbplayer_interface(
+      &sbplayer_interface);
+  SbPlayer player = reinterpret_cast<SbPlayer>(new MockSbPlayer());
+  SbPlayerStatusFunc player_status_cb = nullptr;
+  void* context = nullptr;
+  EXPECT_CALL(sbplayer_interface,
+              CreateUrlPlayer(testing::StrEq(kUrlPlayerUrl), _, _, _, _, _))
+      .WillOnce(DoAll(SaveArg<2>(&player_status_cb), SaveArg<5>(&context),
+                      Return(player)));
+  ON_CALL(sbplayer_interface, GetInfo(player, _))
+      .WillByDefault(Invoke([](SbPlayer, SbPlayerInfo* out_info) {
+        *out_info = {};
+        out_info->duration = 10966705000;
+        out_info->frame_width = 1920;
+        out_info->frame_height = 1080;
+      }));
+
+  // Use the wrapper's own StarboardRenderer.
+  renderer_wrapper_->SetRendererForTesting(nullptr);
+  base::MockOnceCallback<void(bool)> url_init_cb;
+  EXPECT_CALL(url_init_cb, Run(true));
+  renderer_wrapper_->InitializeWithUrl(kUrlPlayerUrl, url_init_cb.Get());
+
+  EmptyMediaResource empty_media_resource;
+  EXPECT_CALL(renderer_init_cb_, Run(HasStatusCode(PIPELINE_OK)));
+  renderer_wrapper_->Initialize(&empty_media_resource, &renderer_client_,
+                                renderer_init_cb_.Get());
+  task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(player_status_cb);
+  player_status_cb(player, context, kSbPlayerStateInitialized,
+                   SB_PLAYER_INITIAL_TICKET);
+  task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(fake_client_extension.metadata());
+  EXPECT_EQ(fake_client_extension.metadata()->duration,
+            base::Microseconds(10966705000));
+  EXPECT_EQ(fake_client_extension.metadata()->natural_size,
+            gfx::Size(1920, 1080));
+
+  renderer_wrapper_.reset();
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 }  // namespace
 

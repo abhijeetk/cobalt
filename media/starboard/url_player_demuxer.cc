@@ -21,11 +21,9 @@
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/audio_decoder_config.h"
-#include "media/base/channel_layout.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_track.h"
 #include "media/base/ranges.h"
-#include "media/base/sample_format.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder_config.h"
 
@@ -52,26 +50,18 @@ void UrlPlayerDemuxerStream::Read(uint32_t count, ReadCB read_cb) {
   NOTREACHED();
 }
 
-// Returns a placeholder audio config to satisfy Mojo IPC stream
-// initialization. The URL player handles audio decoding natively;
-// this config is not used for actual decoding.
+// The platform player decodes the audio, so the codec is not known here.
 AudioDecoderConfig UrlPlayerDemuxerStream::audio_decoder_config() {
-  return AudioDecoderConfig(AudioCodec::kAAC, kSampleFormatS16,
-                            CHANNEL_LAYOUT_STEREO,
-                            /*samples_per_second=*/44100, /*extra_data=*/{},
-                            EncryptionScheme::kUnencrypted);
+  return AudioDecoderConfig();
 }
 
-// Returns a placeholder video config to satisfy Mojo IPC stream
-// initialization. The URL player handles video decoding natively;
-// this config is not used for actual decoding.
+// The platform player decodes the video, so only the size it reports is known.
 VideoDecoderConfig UrlPlayerDemuxerStream::video_decoder_config() {
-  static const gfx::Size kPlaceholderSize(1, 1);
-  return VideoDecoderConfig(
-      VideoCodec::kH264, VideoCodecProfile::H264PROFILE_BASELINE,
-      VideoDecoderConfig::AlphaMode::kIsOpaque, VideoColorSpace(),
-      kNoTransformation, kPlaceholderSize, gfx::Rect(kPlaceholderSize),
-      kPlaceholderSize, /*extra_data=*/{}, EncryptionScheme::kUnencrypted);
+  return VideoDecoderConfig(VideoCodec::kUnknown, VIDEO_CODEC_PROFILE_UNKNOWN,
+                            VideoDecoderConfig::AlphaMode::kIsOpaque,
+                            VideoColorSpace(), kNoTransformation, natural_size_,
+                            gfx::Rect(natural_size_), natural_size_,
+                            /*extra_data=*/{}, EncryptionScheme::kUnencrypted);
 }
 
 DemuxerStream::Type UrlPlayerDemuxerStream::type() const {
@@ -172,6 +162,7 @@ void UrlPlayerDemuxer::OnPlatformMetadata(const UrlPlayerMetadata& metadata) {
   DCHECK_NE(metadata.duration, base::TimeDelta());
   DCHECK_NE(metadata.duration, kNoTimestamp);
   host_->SetDuration(metadata.duration);
+  video_stream_.set_natural_size(metadata.natural_size);
 }
 
 void UrlPlayerDemuxer::OnPlatformDurationChange(base::TimeDelta duration) {

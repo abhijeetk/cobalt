@@ -235,6 +235,17 @@ class UrlPlayerDemuxerManagerTest : public ::testing::Test {
   raw_ptr<Demuxer> demuxer_ = nullptr;
 };
 
+TEST_F(UrlPlayerDemuxerManagerTest, PausedPreloadMetadataStartsNormally) {
+  EXPECT_EQ(CreateDemuxer(DataSource::METADATA, /*needs_first_frame=*/false),
+            Pipeline::StartType::kNormal);
+}
+
+TEST_F(UrlPlayerDemuxerManagerTest,
+       PausedPreloadMetadataNeedingFirstFrameStartsNormally) {
+  EXPECT_EQ(CreateDemuxer(DataSource::METADATA, /*needs_first_frame=*/true),
+            Pipeline::StartType::kNormal);
+}
+
 TEST_F(UrlPlayerDemuxerManagerTest, PreloadAutoStartsNormally) {
   EXPECT_EQ(CreateDemuxer(DataSource::AUTO, /*needs_first_frame=*/false),
             Pipeline::StartType::kNormal);

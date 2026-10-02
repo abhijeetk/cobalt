@@ -7,6 +7,8 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -22,6 +24,7 @@
 #include "base/threading/simple_thread.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
@@ -963,6 +966,157 @@ TEST_F(PipelineImplTest, RendererErrorsReset) {
 
   base::RunLoop().RunUntilIdle();
 }
+
+#if BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
+// A demuxer whose metadata is only known after the renderer initializes.
+class UrlPlayerMockDemuxer : public StrictMock<MockDemuxer> {
+ public:
+  DemuxerType GetDemuxerType() const override {
+    return DemuxerType::kUrlPlayerDemuxer;
+  }
+};
+
+class PipelineImplUrlPlayerTest : public PipelineImplTest {
+ protected:
+  static constexpr base::TimeDelta kPlatformDuration = base::Seconds(10966);
+
+  // Starts the pipeline and holds the renderer init callback in
+  // |renderer_init_cb_|. Main-thread callbacks are appended to |events_|.
+  void StartAndHoldRendererInit(bool url_player_demuxer) {
+    if (url_player_demuxer) {
+      demuxer_ = std::make_unique<UrlPlayerMockDemuxer>();
+      EXPECT_CALL(*demuxer_, GetTimelineOffset())
+          .WillRepeatedly(Return(base::Time()));
+      EXPECT_CALL(*demuxer_, GetStartTime())
+          .WillRepeatedly(Return(start_time_));
+    }
+    CreateAudioAndVideoStream();
+    EXPECT_CALL(*demuxer_, GetAllStreams()).WillRepeatedly(Return(streams_));
+    EXPECT_CALL(*demuxer_, OnInitialize(_, _))
+        .WillOnce(
+            DoAll(SaveArg<0>(&demuxer_host_), PostCallback<1>(PIPELINE_OK)));
+    EXPECT_CALL(*renderer_, SetVolume(1.0f));
+    EXPECT_CALL(*renderer_,
+                SetWasPlayedWithUserActivationAndHighMediaEngagement(false));
+    EXPECT_CALL(*renderer_, OnInitialize(_, _, _))
+        .WillOnce(Invoke([this](MediaResource*, RendererClient* client,
+                                PipelineStatusCallback& init_cb) {
+          renderer_client_ = client;
+          renderer_init_cb_ = std::move(init_cb);
+        }));
+    EXPECT_CALL(callbacks_, OnMetadata(_))
+        .Times(::testing::AtMost(1))
+        .WillRepeatedly(Invoke([this](const PipelineMetadata& metadata) {
+          events_.push_back("OnMetadata");
+          duration_at_metadata_ = pipeline_->GetMediaDuration();
+          metadata_ = metadata;
+        }));
+    EXPECT_CALL(callbacks_, OnDurationChange())
+        .Times(::testing::AnyNumber())
+        .WillRepeatedly(
+            Invoke([this]() { events_.push_back("OnDurationChange"); }));
+
+    StartPipeline();
+    base::RunLoop().RunUntilIdle();
+  }
+
+  // Completes the held renderer init, first reporting the platform duration
+  // as the URL player client does before its init callback.
+  void CompleteRendererInit(PipelineStatus status) {
+    ASSERT_TRUE(renderer_init_cb_);
+    if (status == PIPELINE_OK) {
+      EXPECT_CALL(*renderer_, SetPlaybackRate(0.0));
+      EXPECT_CALL(*renderer_, StartPlayingFrom(start_time_))
+          .WillOnce(SetBufferingState(&renderer_client_, BUFFERING_HAVE_ENOUGH,
+                                      BUFFERING_CHANGE_REASON_UNKNOWN));
+      EXPECT_CALL(callbacks_,
+                  OnBufferingStateChange(BUFFERING_HAVE_ENOUGH,
+                                         BUFFERING_CHANGE_REASON_UNKNOWN));
+      EXPECT_CALL(callbacks_, OnStart(HasStatusCode(PIPELINE_OK)))
+          .WillOnce(
+              InvokeWithoutArgs([this]() { events_.push_back("OnStart"); }));
+      demuxer_host_->SetDuration(kPlatformDuration);
+    } else {
+      EXPECT_CALL(callbacks_, OnStart(SameStatusCode(status)))
+          .WillOnce(
+              InvokeWithoutArgs([this]() { events_.push_back("OnStart"); }));
+    }
+    std::move(renderer_init_cb_).Run(status);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  int IndexOfEvent(const std::string& event) const {
+    for (size_t i = 0; i < events_.size(); ++i) {
+      if (events_[i] == event) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  }
+
+  PipelineStatusCallback renderer_init_cb_;
+  std::vector<std::string> events_;
+  std::optional<base::TimeDelta> duration_at_metadata_;
+};
+
+TEST_F(PipelineImplUrlPlayerTest, UrlPlayerMetadataWaitsForRendererInit) {
+  StartAndHoldRendererInit(/*url_player_demuxer=*/true);
+  EXPECT_EQ(IndexOfEvent("OnMetadata"), -1)
+      << "OnMetadata was posted before the renderer finished initializing";
+
+  CompleteRendererInit(PIPELINE_OK);
+  const int metadata_index = IndexOfEvent("OnMetadata");
+  ASSERT_GE(metadata_index, 0);
+  EXPECT_LT(metadata_index, IndexOfEvent("OnStart"));
+  EXPECT_TRUE(metadata_.has_audio);
+  EXPECT_TRUE(metadata_.has_video);
+}
+
+TEST_F(PipelineImplUrlPlayerTest, UrlPlayerDurationPrecedesMetadata) {
+  StartAndHoldRendererInit(/*url_player_demuxer=*/true);
+  CompleteRendererInit(PIPELINE_OK);
+
+  const int duration_index = IndexOfEvent("OnDurationChange");
+  const int metadata_index = IndexOfEvent("OnMetadata");
+  ASSERT_GE(duration_index, 0);
+  ASSERT_GE(metadata_index, 0);
+  EXPECT_LT(duration_index, metadata_index);
+  EXPECT_EQ(duration_at_metadata_, kPlatformDuration);
+}
+
+TEST_F(PipelineImplUrlPlayerTest, UrlPlayerRendererInitErrorReportsNoMetadata) {
+  StartAndHoldRendererInit(/*url_player_demuxer=*/true);
+  CompleteRendererInit(PIPELINE_ERROR_INITIALIZATION_FAILED);
+
+  EXPECT_EQ(IndexOfEvent("OnMetadata"), -1);
+  EXPECT_GE(IndexOfEvent("OnStart"), 0);
+}
+
+TEST_F(PipelineImplUrlPlayerTest, UrlPlayerResumeReportsNoMetadata) {
+  StartAndHoldRendererInit(/*url_player_demuxer=*/true);
+  CompleteRendererInit(PIPELINE_OK);
+  ASSERT_GE(IndexOfEvent("OnMetadata"), 0);
+  const size_t events_before_suspend = events_.size();
+
+  ExpectSuspend();
+  DoSuspend();
+  const base::TimeDelta resume_time = base::Seconds(2000);
+  ExpectResume(resume_time);
+  DoResume(resume_time);
+
+  for (size_t i = events_before_suspend; i < events_.size(); ++i) {
+    EXPECT_NE(events_[i], "OnMetadata");
+  }
+}
+
+TEST_F(PipelineImplUrlPlayerTest, DefaultDemuxerReportsMetadataBeforeRenderer) {
+  StartAndHoldRendererInit(/*url_player_demuxer=*/false);
+  EXPECT_GE(IndexOfEvent("OnMetadata"), 0);
+
+  CompleteRendererInit(PIPELINE_OK);
+  EXPECT_LT(IndexOfEvent("OnMetadata"), IndexOfEvent("OnStart"));
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS) && BUILDFLAG(USE_STARBOARD_MEDIA)
 
 class PipelineTeardownTest : public PipelineImplTest {
  public:

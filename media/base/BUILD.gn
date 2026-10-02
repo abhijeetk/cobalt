@@ -493,6 +493,8 @@ source_set("base") {
       "starboard/starboard_renderer_config.cc",
       "starboard/starboard_renderer_config.h",
       "starboard/starboard_rendering_mode.h",
+      "starboard/url_player_media_resource.h",
+      "starboard/url_player_metadata.h",
     ]
 
     deps += [

@@ -365,6 +365,28 @@ TEST_F(SbUrlPlayerPrepareTest, SeekAfterInitializedReachesPresenting) {
   EXPECT_TRUE(recorder_.errors().empty());
 }
 
+TEST_F(SbUrlPlayerPrepareTest, BackToBackSeeksPresentOnlyTheLastTicket) {
+  CreatePlayer(kFixturePath);
+  ASSERT_TRUE(recorder_.WaitForStatus(
+      kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
+  SbPlayerSeek(player_, 0, 1);
+  ASSERT_TRUE(
+      recorder_.WaitForStatus(kSbPlayerStatePresenting, 1, kSeekTimeout));
+
+  // The second seek supersedes the first, whose completion must be dropped.
+  constexpr int64_t kFirstTarget = 500'000;
+  constexpr int64_t kSecondTarget = 1'500'000;
+  SbPlayerSeek(player_, kFirstTarget, 2);
+  SbPlayerSeek(player_, kSecondTarget, 3);
+  ASSERT_TRUE(
+      recorder_.WaitForStatus(kSbPlayerStatePresenting, 3, kSeekTimeout));
+  recorder_.Settle(kSettleTime);
+
+  EXPECT_EQ(recorder_.CountStatus(kSbPlayerStatePresenting, 2), 0);
+  EXPECT_EQ(recorder_.CountStatus(kSbPlayerStatePresenting, 3), 1);
+  EXPECT_NEAR(GetInfo().current_media_timestamp, kSecondTarget, 100'000);
+}
+
 TEST_F(SbUrlPlayerPrepareTest, SeekBeforeInitializedReportsError) {
   if (SB_DCHECK_ENABLED) {
     GTEST_SKIP() << "SbPlayerSeek() before Initialized fails a DCHECK.";

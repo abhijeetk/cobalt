@@ -448,7 +448,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
   }
   _initializedReported = YES;
   SB_LOG(INFO) << "[UrlPlayer] AVPlayer and its item are ready to play.";
-  [self updatePlayerState:kSbPlayerStateInitialized];
+  [self updatePlayerState:kSbPlayerStateInitialized
+                   ticket:SB_PLAYER_INITIAL_TICKET];
 }
 
 - (void)startAccessLogTimer {
@@ -621,24 +622,30 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
   return NSMakeRange(startTimestamp, durationTimestamp);
 }
 
-- (void)setCurrentMediaTime:(NSInteger)currentMediaTime {
+- (void)seekToMediaTime:(NSInteger)mediaTime ticket:(int)ticket {
   if (_player.status != AVPlayerStatusReadyToPlay ||
       _player.currentItem.status != AVPlayerItemStatusReadyToPlay) {
-    SB_LOG(ERROR) << "[UrlPlayer] Seek to " << currentMediaTime
+    SB_LOG(ERROR) << "[UrlPlayer] Seek to " << mediaTime
                   << " ignored: the player is not ready to play.";
     return;
   }
-  [self updatePlayerState:kSbPlayerStatePrerolling];
+  [self updatePlayerState:kSbPlayerStatePrerolling ticket:ticket];
   __weak SBDApplicationPlayer* weakSelf = self;
-  [_player seekToTime:CMTimeMake(currentMediaTime, 1000000)
+  [_player seekToTime:CMTimeMake(mediaTime, 1000000)
         toleranceBefore:kCMTimeZero
          toleranceAfter:kCMTimeZero
       completionHandler:^(BOOL finished) {
-        SBDApplicationPlayer* strongSelf = weakSelf;
-        if (!strongSelf) {
+        // A seek superseded by a newer one completes with |finished| == NO.
+        if (!finished) {
           return;
         }
-        [strongSelf updatePlayerState:kSbPlayerStatePresenting];
+        dispatch_async(dispatch_get_main_queue(), ^{
+          SBDApplicationPlayer* strongSelf = weakSelf;
+          if (!strongSelf || strongSelf->_ticket != ticket) {
+            return;
+          }
+          [strongSelf updatePlayerState:kSbPlayerStatePresenting ticket:ticket];
+        });
       }];
 }
 
@@ -655,7 +662,7 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
       return;
     }
     self->_ticket = ticket;
-    self.currentMediaTime = time;
+    [self seekToMediaTime:time ticket:ticket];
   });
 }
 
@@ -703,6 +710,10 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (void)updatePlayerState:(SbPlayerState)state {
+  [self updatePlayerState:state ticket:_ticket];
+}
+
+- (void)updatePlayerState:(SbPlayerState)state ticket:(int)ticket {
   if (_destroyCalled) {
     return;
   }
@@ -719,7 +730,7 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
       SBDPlayerManager* playerManager = SBDGetApplication().playerManager;
       SbPlayer starboardPlayer =
           [playerManager starboardPlayerForApplicationPlayer:self];
-      _playerStatusFunc(starboardPlayer, _playerContext, _playerState, _ticket);
+      _playerStatusFunc(starboardPlayer, _playerContext, _playerState, ticket);
     }
   }
 

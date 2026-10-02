@@ -41,6 +41,16 @@ config("wnos") {
   ]
 }
 
+if (is_ios && target_platform == "tvos") {
+  # Media for the URL player tests. AVPlayer can't load an HLS playlist from a
+  # file URL, so they play an MP4 file instead.
+  bundle_data("url_player_test_data") {
+    testonly = true
+    sources = [ "//media/test/data/bear-1280x720.mp4" ]
+    outputs = [ "{{bundle_resources_dir}}/content/test/starboard/nplb/url_player/{{source_file_part}}" ]
+  }
+}
+
 test("nplb") {
   testonly = true
 
@@ -410,6 +420,12 @@ test("nplb") {
       "//starboard/content/ssl:copy_ssl_certificates_prod_cobalt",
     ]
     deps += [ "//starboard/content/fonts:copy_font_data" ]
+  }
+
+  if (is_ios && target_platform == "tvos") {
+    # |starboard_platform_sources| is not built for iOS (is_starboard=false).
+    sources += [ "url_player_create_test.cc" ]
+    deps += [ ":url_player_test_data" ]
   }
 
   if (is_ios && target_platform == "tvos" && is_internal_build) {

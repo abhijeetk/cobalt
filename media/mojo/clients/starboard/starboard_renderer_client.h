@@ -158,6 +158,9 @@ class MEDIA_EXPORT StarboardRendererClient
            renderer_extension_.is_bound();
   }
   void OnMojoRendererInitialized(PipelineStatus status);
+  // Runs |init_cb_| once the Initialize() reply has arrived and, on success,
+  // the rendering mode and any URL player metadata too.
+  void MaybeRunInitCB();
   void SetMojoRendererInitialized(PipelineStatus status);
   bool IsMojoRendererInitialized() const;
   PipelineStatus pipeline_status() const;
@@ -191,6 +194,7 @@ class MEDIA_EXPORT StarboardRendererClient
   raw_ptr<RendererClient> client_ = nullptr;
 #if BUILDFLAG(IS_IOS_TVOS)
   raw_ptr<UrlPlayerMediaResource> url_resource_ = nullptr;
+  bool has_url_player_metadata_ = false;
 #endif  // BUILDFLAG(IS_IOS_TVOS)
   PipelineStatusCallback init_cb_;
 

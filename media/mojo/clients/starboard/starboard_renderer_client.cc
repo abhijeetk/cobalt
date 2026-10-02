@@ -276,12 +276,7 @@ void StarboardRendererClient::UpdateStarboardRenderingMode(
     case StarboardRenderingMode::kInvalid:
       NOTREACHED() << "Invalid SbPlayer output mode";
   }
-  // OnMojoRendererInitialized() should be called from StarboardRenderer
-  // after this. In the case where OnMojoRendererInitialized() is called
-  // before this, run |init_cb_| if not null.
-  if (IsMojoRendererInitialized() && !init_cb_.is_null()) {
-    std::move(init_cb_).Run(pipeline_status());
-  }
+  MaybeRunInitCB();
 }
 
 void StarboardRendererClient::GetSbWindowHandle() {
@@ -352,6 +347,8 @@ void StarboardRendererClient::OnUrlPlayerMetadata(
   }
   url_resource_->OnPlatformMetadata(
       {metadata->duration, metadata->natural_size});
+  has_url_player_metadata_ = true;
+  MaybeRunInitCB();
 }
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
@@ -554,17 +551,31 @@ void StarboardRendererClient::InitAndConstructMojoRenderer(
 
 void StarboardRendererClient::OnMojoRendererInitialized(PipelineStatus status) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  // No rendering mode is sent on an init error, so don't wait for one.
-  if (!status.is_ok() || rendering_mode_ != StarboardRenderingMode::kInvalid) {
-    DCHECK(!init_cb_.is_null());
-    std::move(init_cb_).Run(status);
-  }
+  DCHECK(!init_cb_.is_null());
   SetMojoRendererInitialized(status);
+  MaybeRunInitCB();
+}
 
-  // StarboardRenderer reports |rendering_mode_| before calling
-  // OnMojoRendererInitialized(). If |rendering_mode_| is not
-  // reported yet, call |init_cb_| in UpdateStarboardRenderingMode()
-  // to inform media pipeline.
+void StarboardRendererClient::MaybeRunInitCB() {
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  if (init_cb_.is_null() || !IsMojoRendererInitialized()) {
+    return;
+  }
+  const PipelineStatus status = pipeline_status();
+  // On an init error, no rendering mode or URL player metadata is sent, so
+  // don't wait for them. On success, each may arrive before or after the
+  // Initialize() reply.
+  if (status.is_ok()) {
+    if (rendering_mode_ == StarboardRenderingMode::kInvalid) {
+      return;
+    }
+#if BUILDFLAG(IS_IOS_TVOS)
+    if (url_resource_ && !has_url_player_metadata_) {
+      return;
+    }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+  }
+  std::move(init_cb_).Run(status);
 }
 
 void StarboardRendererClient::SetMojoRendererInitialized(

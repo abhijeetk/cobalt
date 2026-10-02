@@ -554,13 +554,15 @@ TEST_F(StarboardRendererClientTest,
       << "Renderer.Initialize was sent before the URL handoff was answered";
   EXPECT_TRUE(::testing::Mock::VerifyAndClearExpectations(&renderer_init_cb_));
 
-  EXPECT_CALL(renderer_init_cb_, Run(HasStatusCode(PIPELINE_OK)));
   mojo::MakeSelfOwnedReceiver(std::make_unique<FakeStarboardRendererExtension>(
                                   &fake_mojom_renderer_record_),
                               std::move(extension_receiver));
   task_environment_.RunUntilIdle();
   EXPECT_EQ(fake_mojom_renderer_record_.last_stream_count,
             std::optional<size_t>(0));
+
+  EXPECT_CALL(renderer_init_cb_, Run(HasStatusCode(PIPELINE_OK)));
+  client->OnUrlPlayerMetadata(CreateUrlPlayerMetadata());
 }
 
 TEST_F(StarboardRendererClientTest,
@@ -588,6 +590,106 @@ TEST_F(StarboardRendererClientTest,
               Run(HasStatusCode(PIPELINE_ERROR_INITIALIZATION_FAILED)));
   starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
                                          renderer_init_cb_.Get());
+  task_environment_.RunUntilIdle();
+}
+
+TEST_F(StarboardRendererClientTest,
+       UrlPlayerInitCbWaitsForUrlMetadataReplyThenMode) {
+  FakeUrlPlayerMediaResource url_resource;
+  InitializeStarboardRendererClient();
+
+  EXPECT_CALL(renderer_init_cb_, Run(_)).Times(0);
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         renderer_init_cb_.Get());
+  task_environment_.RunUntilIdle();
+  starboard_renderer_client_->UpdateStarboardRenderingMode(
+      StarboardRenderingMode::kPunchOut);
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(::testing::Mock::VerifyAndClearExpectations(&renderer_init_cb_))
+      << "init_cb ran without URL player metadata";
+}
+
+TEST_F(StarboardRendererClientTest,
+       UrlPlayerInitCbWaitsForUrlMetadataModeThenReply) {
+  FakeUrlPlayerMediaResource url_resource;
+  InitializeStarboardRendererClient();
+
+  EXPECT_CALL(renderer_init_cb_, Run(_)).Times(0);
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         renderer_init_cb_.Get());
+  starboard_renderer_client_->UpdateStarboardRenderingMode(
+      StarboardRenderingMode::kPunchOut);
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(::testing::Mock::VerifyAndClearExpectations(&renderer_init_cb_))
+      << "init_cb ran without URL player metadata";
+}
+
+// Runs the URL player init join with its three inputs in |order|: 'M' is the
+// metadata, 'R' the Initialize() reply and 'D' the rendering mode.
+class StarboardRendererClientUrlJoinTest
+    : public StarboardRendererClientTest,
+      public ::testing::WithParamInterface<const char*> {};
+
+TEST_P(StarboardRendererClientUrlJoinTest, InitCbRunsOnceAfterAllInputs) {
+  const std::string order = GetParam();
+  ASSERT_EQ(order.size(), 3u);
+  std::vector<std::string> events;
+  FakeUrlPlayerMediaResource url_resource(&events);
+  InitializeStarboardRendererClient();
+
+  EXPECT_CALL(renderer_init_cb_, Run(_)).Times(0);
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         renderer_init_cb_.Get());
+  for (size_t i = 0; i < order.size(); ++i) {
+    if (i == order.size() - 1) {
+      EXPECT_TRUE(
+          ::testing::Mock::VerifyAndClearExpectations(&renderer_init_cb_))
+          << "init_cb ran before input " << i << " of " << order;
+      EXPECT_CALL(renderer_init_cb_, Run(HasStatusCode(PIPELINE_OK)))
+          .WillOnce([&events](PipelineStatus) { events.push_back("init_cb"); });
+    }
+    switch (order[i]) {
+      case 'M':
+        starboard_renderer_client_->OnUrlPlayerMetadata(
+            CreateUrlPlayerMetadata());
+        break;
+      case 'R':
+        task_environment_.RunUntilIdle();
+        break;
+      case 'D':
+        starboard_renderer_client_->UpdateStarboardRenderingMode(
+            StarboardRenderingMode::kPunchOut);
+        break;
+    }
+  }
+  task_environment_.RunUntilIdle();
+
+  EXPECT_EQ(events, (std::vector<std::string>{"metadata", "init_cb"}));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AllOrders,
+    StarboardRendererClientUrlJoinTest,
+    ::testing::Values("MRD", "MDR", "RMD", "RDM", "DMR", "DRM"));
+
+TEST_F(StarboardRendererClientTest,
+       LateUrlPlayerMetadataAfterInitializeErrorIsNoOp) {
+  FakeUrlPlayerMediaResource url_resource;
+  InitializeStarboardRendererClient(/*with_gpu_factories=*/true,
+                                    /*bypass_mojo_for_media=*/false,
+                                    /*mojo_initialize_result=*/false);
+
+  EXPECT_CALL(renderer_init_cb_,
+              Run(HasStatusCode(PIPELINE_ERROR_INITIALIZATION_FAILED)));
+  starboard_renderer_client_->Initialize(&url_resource, &renderer_client_,
+                                         renderer_init_cb_.Get());
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(::testing::Mock::VerifyAndClearExpectations(&renderer_init_cb_));
+
+  EXPECT_CALL(renderer_init_cb_, Run(_)).Times(0);
+  starboard_renderer_client_->OnUrlPlayerMetadata(CreateUrlPlayerMetadata());
+  starboard_renderer_client_->UpdateStarboardRenderingMode(
+      StarboardRenderingMode::kPunchOut);
   task_environment_.RunUntilIdle();
 }
 

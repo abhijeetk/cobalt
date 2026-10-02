@@ -1181,6 +1181,22 @@ void StarboardRenderer::OnPlayerError(SbPlayerError error,
 
   state_ = STATE_ERROR;
 
+#if BUILDFLAG(IS_IOS_TVOS)
+  if (error >= kSbPlayerErrorMax) {
+    DCHECK(IsUrlPlayer());
+    MEDIA_LOG(ERROR, media_log_) << message;
+    switch (static_cast<SbUrlPlayerError>(error)) {
+      case kSbUrlPlayerErrorNetwork:
+        NotifyError(PIPELINE_ERROR_NETWORK);
+        break;
+      case kSbUrlPlayerErrorSrcNotSupported:
+        NotifyError(DEMUXER_ERROR_COULD_NOT_OPEN);
+        break;
+    }
+    return;
+  }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+
   switch (error) {
     case kSbPlayerErrorDecode:
       MEDIA_LOG(ERROR, media_log_) << message;

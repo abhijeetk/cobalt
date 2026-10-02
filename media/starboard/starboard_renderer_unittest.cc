@@ -15,6 +15,7 @@
 #include "media/starboard/starboard_renderer.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/functional/bind.h"
@@ -37,6 +38,7 @@
 
 using ::base::test::RunOnceCallback;
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::DoAll;
 using ::testing::Invoke;
 using ::testing::NiceMock;
@@ -126,6 +128,50 @@ class StarboardRendererTest : public testing::Test {
   GetSbDecodeTargetGraphicsContextProvider() {
     return &decode_target_graphics_context_provider_;
   }
+
+#if BUILDFLAG(IS_IOS_TVOS)
+  // Creates a URL player whose GetInfo() reports |url_player_info_|.
+  SbPlayer InitializeUrlPlayer() {
+    renderer_->SetSourceUrl("https://example.com/master.m3u8");
+
+    SbPlayer player = reinterpret_cast<SbPlayer>(new MockSbPlayer());
+    EXPECT_CALL(mock_sbplayer_interface_, CreateUrlPlayer(_, _, _, _, _, _))
+        .WillOnce(DoAll(SaveArg<2>(&player_status_cb_),
+                        SaveArg<4>(&player_error_cb_), SaveArg<5>(&context_),
+                        Return(player)));
+    EXPECT_CALL(mock_sbplayer_interface_, SetBounds(_, _, _, _, _, _))
+        .Times(AnyNumber());
+    EXPECT_CALL(mock_sbplayer_interface_, GetInfo(player, _))
+        .Times(AnyNumber())
+        .WillRepeatedly(Invoke([this](SbPlayer, SbPlayerInfo* out_info) {
+          *out_info = url_player_info_;
+        }));
+    EXPECT_CALL(renderer_init_cb_, Run(_)).WillOnce(SaveArg<0>(&init_status_));
+
+    renderer_->Initialize(&media_resource_, &renderer_client_,
+                          renderer_init_cb_.Get());
+    task_environment_.RunUntilIdle();
+    return player;
+  }
+
+  // A prepared item as reported by the platform at Initialized.
+  void SetUrlPlayerInfo(int64_t duration_us) {
+    url_player_info_ = {};
+    url_player_info_.duration = duration_us;
+    url_player_info_.frame_width = 1920;
+    url_player_info_.frame_height = 1080;
+  }
+
+  void ReportUrlPlayerInitialized(SbPlayer player) {
+    ASSERT_TRUE(player_status_cb_);
+    player_status_cb_(player, context_, kSbPlayerStateInitialized,
+                      SB_PLAYER_INITIAL_TICKET);
+    task_environment_.RunUntilIdle();
+  }
+
+  SbPlayerInfo url_player_info_ = {};
+  std::optional<PipelineStatus> init_status_;
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
   base::test::TaskEnvironment task_environment_;
   base::MockOnceCallback<void(bool)> set_cdm_cb_;
@@ -474,6 +520,65 @@ TEST_F(StarboardRendererTest,
                     SB_PLAYER_INITIAL_TICKET);
   task_environment_.RunUntilIdle();
 }
+
+#if BUILDFLAG(IS_IOS_TVOS)
+constexpr int64_t kUrlPlayerVodDurationUs = 10966705000;
+
+TEST_F(StarboardRendererTest, UrlPlayerSrcNotSupportedBeforeInitRunsInitCb) {
+  SbPlayer player = InitializeUrlPlayer();
+  ASSERT_TRUE(player_error_cb_);
+  EXPECT_CALL(renderer_client_, OnError(_)).Times(0);
+
+  player_error_cb_(player, context_,
+                   static_cast<SbPlayerError>(kSbUrlPlayerErrorSrcNotSupported),
+                   "AV key value is not loaded.");
+  task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(init_status_.has_value());
+  EXPECT_EQ(init_status_->code(), DEMUXER_ERROR_COULD_NOT_OPEN);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerNetworkErrorBeforeInitRunsInitCb) {
+  SbPlayer player = InitializeUrlPlayer();
+  ASSERT_TRUE(player_error_cb_);
+  EXPECT_CALL(renderer_client_, OnError(_)).Times(0);
+
+  player_error_cb_(player, context_,
+                   static_cast<SbPlayerError>(kSbUrlPlayerErrorNetwork),
+                   "network error");
+  task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(init_status_.has_value());
+  EXPECT_EQ(init_status_->code(), PIPELINE_ERROR_NETWORK);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerSrcNotSupportedAfterInitCallsOnError) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  ReportUrlPlayerInitialized(player);
+  ASSERT_TRUE(init_status_.has_value());
+
+  EXPECT_CALL(renderer_client_,
+              OnError(HasStatusCode(DEMUXER_ERROR_COULD_NOT_OPEN)));
+  player_error_cb_(player, context_,
+                   static_cast<SbPlayerError>(kSbUrlPlayerErrorSrcNotSupported),
+                   "item failed");
+  task_environment_.RunUntilIdle();
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerNetworkErrorAfterInitCallsOnError) {
+  SetUrlPlayerInfo(kUrlPlayerVodDurationUs);
+  SbPlayer player = InitializeUrlPlayer();
+  ReportUrlPlayerInitialized(player);
+  ASSERT_TRUE(init_status_.has_value());
+
+  EXPECT_CALL(renderer_client_, OnError(HasStatusCode(PIPELINE_ERROR_NETWORK)));
+  player_error_cb_(player, context_,
+                   static_cast<SbPlayerError>(kSbUrlPlayerErrorNetwork),
+                   "network error");
+  task_environment_.RunUntilIdle();
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 
 }  // namespace
 

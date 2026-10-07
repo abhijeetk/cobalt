@@ -130,7 +130,7 @@ decltype(auto) DispatchJniFunc(Func&& func, JNIEnv* env, Args&&... args) {
   }
 }
 
->>>>>>> parent of f7ba0770bf0 (CONFLICTED Chromium Cherry pick: Revert Cobalt.)
+>>>>>>> parent of bd328260efeca (CONFLICTED Chromium Cherry pick: Revert Cobalt.)
 }  // namespace jni_zero::internal
 
 #endif  // JNI_ZERO_JNI_ZERO_INTERNAL_H

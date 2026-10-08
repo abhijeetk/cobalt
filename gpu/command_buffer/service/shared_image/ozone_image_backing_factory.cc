@@ -91,7 +91,6 @@ OzoneImageBackingFactory::CreateGpuMemoryBufferHandle(
     const gfx::Size& size,
     viz::SharedImageFormat format,
     gfx::BufferUsage usage) {
-CHECK(viz::HasEquivalentBufferFormat(format));
   VulkanDeviceQueue* device_queue = nullptr;
 #if BUILDFLAG(ENABLE_VULKAN)
   if (vulkan_context_provider) {

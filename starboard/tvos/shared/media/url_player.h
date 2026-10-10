@@ -66,6 +66,15 @@ typedef void (*SbPlayerEncryptedMediaInitDataEncounteredCB)(
 // of SbPlayerCreateWithUrl, it takes in a callback,
 // |encrypted_media_init_data_encountered_cb|, which is run when encrypted media
 // initial data is encountered.
+//
+// The player prepares |url| asynchronously after creation. Once it is
+// prepared, kSbPlayerStateInitialized is reported exactly once, with
+// SB_PLAYER_INITIAL_TICKET; from then on SbPlayerGetInfo() reports a valid
+// duration, and the frame size when it is known. If preparing fails,
+// |player_error_func| is called instead, e.g. with
+// kSbUrlPlayerErrorSrcNotSupported. An SbPlayerSeek() issued before
+// kSbPlayerStateInitialized is reported is ignored; the player still prepares
+// and still reports kSbPlayerStateInitialized.
 SbPlayer SbUrlPlayerCreate(const char* url,
                            SbWindow window,
                            SbPlayerStatusFunc player_status_func,

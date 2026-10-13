@@ -165,6 +165,12 @@ constexpr int64_t kPrepareTimeout = 10'000'000;  // 10s
 constexpr int64_t kSeekTimeout = 5'000'000;      // 5s
 // Unlike the timeouts above, we wait this one out, to catch a late callback.
 constexpr int64_t kSettleTime = 1'000'000;  // 1s
+// Well inside the fixture, so that a seek there is distinguishable from a
+// plain start at zero.
+constexpr int64_t kSeekTarget = 1'000'000;  // 1s
+// The seek asks for an exact position (toleranceBefore/After kCMTimeZero), so
+// this only absorbs the reporting jitter of SbPlayerGetInfo().
+constexpr int64_t kSeekTolerance = 100'000;  // 0.1s
 constexpr int kSeekTicket = 1;
 constexpr int kSecondSeekTicket = 2;
 
@@ -386,12 +392,16 @@ TEST_F(SbUrlPlayerPrepareTest, SeekAfterInitializedReachesPresenting) {
   ASSERT_NO_FATAL_FAILURE(WaitForPlayerState(
       kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
 
-  SbPlayerSeek(player_, 0, kSeekTicket);
+  SbPlayerSeek(player_, kSeekTarget, kSeekTicket);
 
   ASSERT_NO_FATAL_FAILURE(
       WaitForPlayerState(kSbPlayerStatePresenting, kSeekTicket, kSeekTimeout));
   EXPECT_TRUE(HasReceivedPlayerState(kSbPlayerStatePrerolling, kSeekTicket));
   EXPECT_TRUE(errors().empty());
+
+  SbPlayerInfo info = {};
+  SbPlayerGetInfo(player_, &info);
+  EXPECT_NEAR(info.current_media_timestamp, kSeekTarget, kSeekTolerance);
 }
 
 TEST_F(SbUrlPlayerPrepareTest, SeekBeforeInitializedIsIgnored) {

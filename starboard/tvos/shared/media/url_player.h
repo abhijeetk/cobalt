@@ -65,8 +65,9 @@ typedef void (*SbPlayerEncryptedMediaInitDataEncounteredCB)(
 // the frame size once it is known, and the duration, NSIntegerMax when the
 // asset is indefinite or live, or SB_PLAYER_NO_DURATION when it is not
 // known. A failure is reported through |player_error_func| instead. An
-// SbPlayerSeek() issued before Initialized is ignored, so a caller that
-// needs one must hold it until Initialized.
+// SbPlayerSeek() issued before Initialized is ignored, so a caller that needs
+// one must hold it until Initialized. kSbPlayerStatePresenting is only
+// reported once an SbPlayerSeek() completes.
 SbPlayer SbUrlPlayerCreate(const char* url,
                            SbWindow window,
                            SbPlayerStatusFunc player_status_func,

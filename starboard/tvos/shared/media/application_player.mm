@@ -622,8 +622,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 - (void)setCurrentMediaTime:(NSInteger)currentMediaTime {
   if (_player.status != AVPlayerStatusReadyToPlay ||
       _player.currentItem.status != AVPlayerItemStatusReadyToPlay) {
-    SB_LOG(ERROR) << "[UrlPlayer] Seek to " << currentMediaTime
-                  << " ignored: the player is not ready to play.";
+    SB_LOG(WARNING) << "[UrlPlayer] Seek to " << currentMediaTime
+                    << " ignored: the player is no longer ready to play.";
     return;
   }
   [self updatePlayerState:kSbPlayerStatePrerolling];

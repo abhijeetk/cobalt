@@ -159,6 +159,7 @@ int GetDefaultAudioFramesPerBuffer(AudioCodec codec) {
       return 1;
   }
 }
+
 }  // namespace
 
 StarboardRenderer::StarboardRenderer(
@@ -569,9 +570,11 @@ TimeDelta StarboardRenderer::GetMediaTime() {
   if (IsUrlPlayer()) {
     UpdateUrlPlayerVideoResolution();
 
+    // kNoTimestamp carries no duration, so pushing it would clobber a known
+    // finite one.
     if (duration_change_cb_ && duration != kNoTimestamp &&
-        duration != last_duration_) {
-      last_duration_ = duration;
+        duration != last_pushed_duration_) {
+      last_pushed_duration_ = duration;
       duration_change_cb_.Run(duration);
     }
 
@@ -682,6 +685,25 @@ void StarboardRenderer::UpdateUrlPlayerVideoResolution() {
   client_->OnVideoNaturalSizeChange(size);
   if (player_bridge_->GetSbPlayerOutputMode() == kSbPlayerOutputModePunchOut) {
     paint_video_hole_frame_cb_.Run(size);
+  }
+}
+
+void StarboardRenderer::OnUrlPlayerInitialized() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  TimeDelta duration;
+  SbPlayerBridge::PlayerInfo info{nullptr, nullptr, nullptr,
+                                  nullptr, nullptr, &duration};
+  player_bridge_->GetInfo(&info);
+
+  // Not known yet: leave it unrecorded so the first poll that reads one
+  // still pushes it.
+  if (duration == kNoTimestamp) {
+    return;
+  }
+
+  last_pushed_duration_ = duration;
+  if (duration_change_cb_) {
+    duration_change_cb_.Run(duration);
   }
 }
 
@@ -1212,6 +1234,11 @@ void StarboardRenderer::OnPlayerStatus(SbPlayerState state) {
   switch (state) {
     case kSbPlayerStateInitialized:
       CHECK(init_cb_);
+#if BUILDFLAG(IS_IOS_TVOS)
+      if (IsUrlPlayer()) {
+        OnUrlPlayerInitialized();
+      }
+#endif  // BUILDFLAG(IS_IOS_TVOS)
       std::move(init_cb_).Run(PipelineStatus(PIPELINE_OK));
       break;
     case kSbPlayerStatePrerolling:

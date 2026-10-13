@@ -184,6 +184,8 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
 
 #if BUILDFLAG(IS_IOS_TVOS)
   bool IsUrlPlayer() const;
+  // Pushes the platform duration before init_cb_ runs.
+  void OnUrlPlayerInitialized();
   // Handles presenting state for URL player: propagates video resolution
   // for hole-punch rendering and re-applies playback rate.
   void OnUrlPlayerPresenting();
@@ -280,7 +282,8 @@ class MEDIA_EXPORT StarboardRenderer : public Renderer,
   // Cached values for change-detection; only notify upstream when they differ.
   TimeDelta last_buffer_start_;
   TimeDelta last_buffer_length_;
-  TimeDelta last_duration_ = kNoTimestamp;
+  // Last duration pushed to |duration_change_cb_|; kNoTimestamp means none.
+  TimeDelta last_pushed_duration_ = kNoTimestamp;
   gfx::Size url_player_video_size_;
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 #if BUILDFLAG(IS_ANDROID)

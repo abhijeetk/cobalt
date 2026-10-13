@@ -1264,8 +1264,19 @@ void StarboardRenderer::OnPlayerError(SbPlayerError error,
                                        message.c_str()));
       NotifyError(PIPELINE_ERROR_DECODE);
       break;
+    case kSbPlayerErrorSrcNotSupported:
+      MEDIA_LOG(ERROR, media_log_) << message;
+      NotifyError(DEMUXER_ERROR_COULD_NOT_OPEN);
+      break;
     case kSbPlayerErrorMax:
       NOTREACHED();
+      break;
+    default:
+      // An unknown code must still resolve init_cb_, or pipeline start
+      // hangs.
+      MEDIA_LOG(ERROR, media_log_) << message;
+      DUMP_WILL_BE_NOTREACHED();
+      NotifyError(PIPELINE_ERROR_DECODE);
       break;
   }
 }

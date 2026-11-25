@@ -51,9 +51,9 @@ void UrlPlayerDemuxerStream::Read(uint32_t count, ReadCB read_cb) {
   NOTREACHED();
 }
 
-// Returns a placeholder audio config to satisfy Mojo IPC stream
-// initialization. The URL player handles audio decoding natively;
-// this config is not used for actual decoding.
+// Returns a placeholder audio config for the pipeline metadata. The URL
+// player handles audio decoding natively; this config is not used for
+// actual decoding.
 AudioDecoderConfig UrlPlayerDemuxerStream::audio_decoder_config() {
   return AudioDecoderConfig(AudioCodec::kAAC, kSampleFormatS16,
                             CHANNEL_LAYOUT_STEREO,
@@ -61,10 +61,10 @@ AudioDecoderConfig UrlPlayerDemuxerStream::audio_decoder_config() {
                             EncryptionScheme::kUnencrypted);
 }
 
-// Returns a placeholder video config to satisfy Mojo IPC stream
-// initialization. The URL player handles video decoding natively;
-// this config is not used for actual decoding. Its size is the one the
-// platform player reported, or 1x1 until then.
+// Returns a placeholder video config for the pipeline metadata. The URL
+// player handles video decoding natively; this config is not used for
+// actual decoding. Its size is the one the platform player reported, or
+// 1x1 until then.
 VideoDecoderConfig UrlPlayerDemuxerStream::video_decoder_config() {
   return VideoDecoderConfig(
       VideoCodec::kH264, VideoCodecProfile::H264PROFILE_BASELINE,

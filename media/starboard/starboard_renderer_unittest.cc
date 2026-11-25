@@ -1017,7 +1017,7 @@ TEST_F(StarboardRendererTest, RecordsSbPlayerCreateLatenciesForUrlPlayer) {
 
   ASSERT_TRUE(player_status_cb_);
   EXPECT_CALL(mock_sbplayer_interface_, GetInfo(player, _))
-      .WillOnce(SetArgPointee<1>(SbPlayerInfo{}));
+      .WillRepeatedly(SetArgPointee<1>(SbPlayerInfo{}));
   player_status_cb_(player, context_, kSbPlayerStateInitialized,
                     /*ticket=*/SB_PLAYER_INITIAL_TICKET);
   task_environment_.RunUntilIdle();

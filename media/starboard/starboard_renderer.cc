@@ -1325,8 +1325,14 @@ void StarboardRenderer::OnPlayerError(SbPlayerError error,
   state_ = STATE_ERROR;
 
 #if BUILDFLAG(IS_IOS_TVOS)
-  // SbUrlPlayerError codes continue past kSbPlayerErrorMax, so the switch
-  // below cannot name them.
+  // SbUrlPlayerError codes start at kSbPlayerErrorMax, so the switch below
+  // cannot name them.
+  if (IsUrlPlayer() &&
+      error == static_cast<SbPlayerError>(kSbUrlPlayerErrorNetwork)) {
+    MEDIA_LOG(ERROR, media_log_) << message;
+    NotifyError(PIPELINE_ERROR_NETWORK);
+    return;
+  }
   if (IsUrlPlayer() &&
       error == static_cast<SbPlayerError>(kSbUrlPlayerErrorSrcNotSupported)) {
     MEDIA_LOG(ERROR, media_log_) << message;

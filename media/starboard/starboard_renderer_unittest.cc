@@ -1057,6 +1057,36 @@ TEST_F(StarboardRendererTest, UrlPlayerSrcNotSupportedAfterInitialization) {
       player, static_cast<SbPlayerError>(kSbUrlPlayerErrorSrcNotSupported),
       "item failed");
 }
+
+TEST_F(StarboardRendererTest, UrlPlayerNetworkErrorDuringInitialization) {
+  SbPlayer player = InitializeUrlPlayer();
+  ASSERT_FALSE(init_status_.has_value());
+  EXPECT_CALL(renderer_client_, OnError(_)).Times(0);
+
+  ReportPlayerError(player,
+                    static_cast<SbPlayerError>(kSbUrlPlayerErrorNetwork),
+                    "network error");
+
+  ASSERT_TRUE(init_status_.has_value());
+  EXPECT_EQ(init_status_->code(), PIPELINE_ERROR_NETWORK);
+}
+
+TEST_F(StarboardRendererTest, UrlPlayerNetworkErrorAfterInitialization) {
+  SbPlayer player = InitializeUrlPlayer();
+  ASSERT_TRUE(player_status_cb_);
+  EXPECT_CALL(mock_sbplayer_interface_, GetInfo(player, _))
+      .WillOnce(SetArgPointee<1>(SbPlayerInfo{}));
+  player_status_cb_(player, context_, kSbPlayerStateInitialized,
+                    SB_PLAYER_INITIAL_TICKET);
+  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(init_status_.has_value());
+  ASSERT_EQ(init_status_->code(), PIPELINE_OK);
+
+  EXPECT_CALL(renderer_client_, OnError(HasStatusCode(PIPELINE_ERROR_NETWORK)));
+  ReportPlayerError(player,
+                    static_cast<SbPlayerError>(kSbUrlPlayerErrorNetwork),
+                    "network error");
+}
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
 // When the user backgrounds the app while multiple media renderers are active

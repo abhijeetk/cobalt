@@ -16,6 +16,7 @@
 
 #import <MediaPlayer/MediaPlayer.h>
 
+#include <atomic>
 #include <limits>
 
 #include "starboard/common/log.h"
@@ -218,6 +219,20 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
    *  @brief Indicates that the output doesn't have hdcp protection.
    */
   bool _insufficientExternalProtection;
+
+  /**
+   *  @brief The volume and playback rate last set. The volume is applied when
+   *      @c _player is created, the rate when the first seek reaches
+   *      @c kSbPlayerStatePresenting.
+   */
+  std::atomic<double> _volume;
+  std::atomic<double> _playbackRate;
+
+  /**
+   *  @brief Indicates that a seek has reached @c kSbPlayerStatePresenting.
+   *      Only accessed on the main thread.
+   */
+  BOOL _presentingReported;
 }
 
 @synthesize totalDroppedFrames = _totalDroppedFrames;
@@ -242,6 +257,8 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
     _errorOccurred = false;
     _playerShouldPause = false;
     _insufficientExternalProtection = false;
+    _volume = 1.0;
+    _playbackRate = 0.0;
 
     CGRect frame = [UIScreen mainScreen].bounds;
     _playerView = [[SBDPlayerView alloc] initWithFrame:frame];
@@ -364,6 +381,7 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
            object:playerItem];
 
   _player = [AVPlayer playerWithPlayerItem:playerItem];
+  _player.volume = _volume;
 
   [_player addObserver:self
             forKeyPath:@"status"
@@ -560,14 +578,20 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (double)playbackRate {
-  return _player.rate;
+  return _player ? _player.rate : _playbackRate.load();
 }
 
 - (void)setPlaybackRate:(double)playbackRate {
-  if (_player.rate == playbackRate) {
-    return;
-  }
-  _player.rate = playbackRate;
+  _playbackRate = playbackRate;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (!self->_presentingReported) {
+      return;
+    }
+    const double rate = self->_playbackRate;
+    if (self->_player.rate != rate) {
+      self->_player.rate = rate;
+    }
+  });
 }
 
 - (NSInteger)totalDroppedFrames {
@@ -575,11 +599,14 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
 }
 
 - (double)volume {
-  return _player.volume;
+  return _player ? _player.volume : _volume.load();
 }
 
 - (void)setVolume:(double)volume {
-  _player.volume = volume;
+  _volume = volume;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->_player.volume = self->_volume;
+  });
 }
 
 - (NSInteger)currentMediaTime {
@@ -637,6 +664,10 @@ static NSTimeInterval kAccessLogTimerInterval = 1;
         SBDApplicationPlayer* strongSelf = weakSelf;
         if (!strongSelf) {
           return;
+        }
+        if (!strongSelf->_presentingReported) {
+          strongSelf->_presentingReported = YES;
+          strongSelf->_player.rate = strongSelf->_playbackRate;
         }
         [strongSelf updatePlayerState:kSbPlayerStatePresenting];
       }];

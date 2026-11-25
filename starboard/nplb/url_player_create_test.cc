@@ -415,6 +415,46 @@ TEST_F(SbUrlPlayerPrepareTest, SeekBeforeInitializedIsIgnored) {
                                              kSecondSeekTicket, kSeekTimeout));
 }
 
+TEST_F(SbUrlPlayerPrepareTest, VolumeAndRateSetBeforePrepareAreApplied) {
+  ASSERT_NO_FATAL_FAILURE(CreatePlayer(kFixturePath));
+  SbPlayerSetVolume(player_, 0.0);
+  SbPlayerSetPlaybackRate(player_, 0.5);
+  ASSERT_NO_FATAL_FAILURE(WaitForPlayerState(
+      kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
+
+  SbPlayerSeek(player_, 0, kSeekTicket);
+  ASSERT_NO_FATAL_FAILURE(
+      WaitForPlayerState(kSbPlayerStatePresenting, kSeekTicket, kSeekTimeout));
+
+  SbPlayerInfo info = {};
+  SbPlayerGetInfo(player_, &info);
+  EXPECT_EQ(info.volume, 0.0);
+  EXPECT_EQ(info.playback_rate, 0.5);
+}
+
+TEST_F(SbUrlPlayerPrepareTest, RateSetBeforePrepareIsNotAppliedBeforeSeek) {
+  ASSERT_NO_FATAL_FAILURE(CreatePlayer(kFixturePath));
+  SbPlayerSetPlaybackRate(player_, 1.0);
+  ASSERT_NO_FATAL_FAILURE(WaitForPlayerState(
+      kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
+
+  SbPlayerInfo info = {};
+  SbPlayerGetInfo(player_, &info);
+  const int64_t initialized_time = info.current_media_timestamp;
+  DrainCallbacksFor(kSettleTime);
+  SbPlayerGetInfo(player_, &info);
+  EXPECT_EQ(info.current_media_timestamp, initialized_time);
+
+  SbPlayerSeek(player_, 0, kSeekTicket);
+  ASSERT_NO_FATAL_FAILURE(
+      WaitForPlayerState(kSbPlayerStatePresenting, kSeekTicket, kSeekTimeout));
+  SbPlayerGetInfo(player_, &info);
+  const int64_t presenting_time = info.current_media_timestamp;
+  DrainCallbacksFor(kSettleTime);
+  SbPlayerGetInfo(player_, &info);
+  EXPECT_GT(info.current_media_timestamp, presenting_time);
+}
+
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
 }  // namespace

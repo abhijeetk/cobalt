@@ -173,6 +173,11 @@ interface StarboardRendererExtension {
   // Pass source URL for URL player.
   SetSourceUrl(string source_url);
 
+  [EnableIf=is_ios]
+  // Pass the source URL for URL player. Renderer Initialize() must be called
+  // only after the reply.
+  InitializeWithUrl(string url) => (bool success);
+
   [EnableIf=is_android]
   // Notify StarboardRendererWrapper when the current OverlayInfo changes.
   OnOverlayInfoChanged(OverlayInfo overlay_info);

@@ -60,6 +60,10 @@ struct FakeMojomRendererCallRecord {
   bool initialize_with_bypass_bridge_called = false;
   uint32_t last_bypass_bridge_id = 0;
   std::optional<size_t> last_stream_count;
+#if BUILDFLAG(IS_IOS_TVOS)
+  std::optional<std::string> last_url;
+  bool initialize_with_url_result = true;
+#endif  // BUILDFLAG(IS_IOS_TVOS)
 };
 
 class FakeMojomRenderer : public mojom::Renderer {
@@ -120,6 +124,15 @@ class FakeStarboardRendererExtension
       mojom::CommandBufferIdPtr command_buffer_id) override {}
 #if BUILDFLAG(IS_IOS_TVOS)
   void SetSourceUrl(const std::string& source_url) override {}
+  void InitializeWithUrl(const std::string& url,
+                         InitializeWithUrlCallback cb) override {
+    bool result = true;
+    if (record_) {
+      record_->last_url = url;
+      result = record_->initialize_with_url_result;
+    }
+    std::move(cb).Run(result);
+  }
 #endif  // BUILDFLAG(IS_IOS_TVOS)
  private:
   FakeMojomRendererCallRecord* record_ = nullptr;

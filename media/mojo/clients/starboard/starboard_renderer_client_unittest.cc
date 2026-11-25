@@ -484,6 +484,21 @@ TEST_F(StarboardRendererClientTest, UrlPlayerInitCbWaitsForMetadata) {
 }
 
 TEST_F(StarboardRendererClientTest,
+       UrlPlayerInitializesMojoRendererWithoutStreams) {
+  InitializeStarboardRendererClient();
+  starboard_renderer_client_->Initialize(&url_player_demuxer_,
+                                         &renderer_client_, base::DoNothing());
+  starboard_renderer_client_->UpdateStarboardRenderingMode(
+      StarboardRenderingMode::kPunchOut);
+  task_environment_.RunUntilIdle();
+
+  EXPECT_EQ(fake_mojom_renderer_record_.last_url,
+            std::optional<std::string>("https://example.com/master.m3u8"));
+  EXPECT_EQ(fake_mojom_renderer_record_.last_stream_count,
+            std::optional<size_t>(0));
+}
+
+TEST_F(StarboardRendererClientTest,
        UrlPlayerRendererInitializeWaitsForUrlHandoffReply) {
   mojo::PendingRemote<mojom::Renderer> renderer_remote;
   mojo::MakeSelfOwnedReceiver(
@@ -527,7 +542,8 @@ TEST_F(StarboardRendererClientTest,
                                   &fake_mojom_renderer_record_),
                               std::move(extension_receiver));
   task_environment_.RunUntilIdle();
-  EXPECT_TRUE(fake_mojom_renderer_record_.last_stream_count.has_value());
+  EXPECT_EQ(fake_mojom_renderer_record_.last_stream_count,
+            std::optional<size_t>(0));
 }
 
 TEST_F(StarboardRendererClientTest,

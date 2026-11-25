@@ -21,11 +21,9 @@
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/audio_decoder_config.h"
-#include "media/base/channel_layout.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_track.h"
 #include "media/base/ranges.h"
-#include "media/base/sample_format.h"
 #include "media/base/video_decoder_config.h"
 
 namespace media {
@@ -43,34 +41,51 @@ bool IsHlsUrl(const GURL& url) {
          path.find("hls_variant") != std::string_view::npos;
 }
 
-UrlPlayerDemuxerStream::UrlPlayerDemuxerStream(Type type) : type_(type) {}
+namespace {
+
+// Reported as the natural size until the platform player reports one.
+constexpr gfx::Size kPlaceholderNaturalSize(1, 1);
+
+VideoDecoderConfig CreateVideoConfig(const gfx::Size& natural_size) {
+  return VideoDecoderConfig(VideoCodec::kUnknown, VIDEO_CODEC_PROFILE_UNKNOWN,
+                            VideoDecoderConfig::AlphaMode::kIsOpaque,
+                            VideoColorSpace(), kNoTransformation, natural_size,
+                            gfx::Rect(natural_size), natural_size,
+                            /*extra_data=*/{}, EncryptionScheme::kUnencrypted);
+}
+
+}  // namespace
+
+UrlPlayerDemuxerStream::UrlPlayerDemuxerStream(Type type) : type_(type) {
+  DCHECK(type_ == AUDIO || type_ == VIDEO);
+  if (type_ == VIDEO) {
+    video_config_ = CreateVideoConfig(kPlaceholderNaturalSize);
+  }
+}
 
 UrlPlayerDemuxerStream::~UrlPlayerDemuxerStream() = default;
+
+void UrlPlayerDemuxerStream::SetVideoNaturalSize(
+    const gfx::Size& natural_size) {
+  DCHECK_EQ(type_, VIDEO);
+  video_config_ = CreateVideoConfig(natural_size);
+}
 
 void UrlPlayerDemuxerStream::Read(uint32_t count, ReadCB read_cb) {
   NOTREACHED();
 }
 
-// Returns a placeholder audio config for the pipeline metadata. The URL
-// player handles audio decoding natively; this config is not used for
-// actual decoding.
+// The platform player decodes the audio, so the codec is not known here.
 AudioDecoderConfig UrlPlayerDemuxerStream::audio_decoder_config() {
-  return AudioDecoderConfig(AudioCodec::kAAC, kSampleFormatS16,
-                            CHANNEL_LAYOUT_STEREO,
-                            /*samples_per_second=*/44100, /*extra_data=*/{},
-                            EncryptionScheme::kUnencrypted);
+  DCHECK_EQ(type_, AUDIO);
+  return AudioDecoderConfig();
 }
 
-// Returns a placeholder video config for the pipeline metadata. The URL
-// player handles video decoding natively; this config is not used for
-// actual decoding. Its size is the one the platform player reported, or
-// 1x1 until then.
+// The platform player decodes the video, so only the size it reports is
+// known here.
 VideoDecoderConfig UrlPlayerDemuxerStream::video_decoder_config() {
-  return VideoDecoderConfig(
-      VideoCodec::kH264, VideoCodecProfile::H264PROFILE_BASELINE,
-      VideoDecoderConfig::AlphaMode::kIsOpaque, VideoColorSpace(),
-      kNoTransformation, natural_size_, gfx::Rect(natural_size_), natural_size_,
-      /*extra_data=*/{}, EncryptionScheme::kUnencrypted);
+  DCHECK_EQ(type_, VIDEO);
+  return video_config_;
 }
 
 DemuxerStream::Type UrlPlayerDemuxerStream::type() const {
@@ -171,7 +186,7 @@ void UrlPlayerDemuxer::OnPlatformMetadata(base::TimeDelta duration,
     host_->SetDuration(duration);
   }
   if (!natural_size.IsEmpty()) {
-    video_stream_.set_natural_size(natural_size);
+    video_stream_.SetVideoNaturalSize(natural_size);
   }
 }
 

@@ -27,6 +27,7 @@
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
 #include "media/base/starboard/url_player_media_resource.h"
+#include "media/base/video_decoder_config.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
@@ -36,16 +37,18 @@ namespace media {
 // should handle.
 MEDIA_EXPORT bool IsHlsUrl(const GURL& url);
 
-// Placeholder stream to satisfy the stream-based pipeline initialization.
-// Owned by UrlPlayerDemuxer. Created and accessed on the media thread.
+// Renderer-local stream that tells the pipeline which track types exist and,
+// for video, carries the size the platform player reports. The platform
+// player decodes the media, so the codecs are unknown. Never sent to the GPU
+// process, and Read() is never called. Owned by UrlPlayerDemuxer. Created and
+// accessed on the media thread.
 class MEDIA_EXPORT UrlPlayerDemuxerStream : public DemuxerStream {
  public:
   explicit UrlPlayerDemuxerStream(Type type);
   ~UrlPlayerDemuxerStream() override;
 
-  void set_natural_size(const gfx::Size& natural_size) {
-    natural_size_ = natural_size;
-  }
+  // Only valid for the video stream.
+  void SetVideoNaturalSize(const gfx::Size& natural_size);
 
   // DemuxerStream implementation.
   void Read(uint32_t count, ReadCB read_cb) override;
@@ -56,12 +59,14 @@ class MEDIA_EXPORT UrlPlayerDemuxerStream : public DemuxerStream {
 
  private:
   const Type type_;
-  gfx::Size natural_size_{1, 1};
+  // Empty for the audio stream.
+  VideoDecoderConfig video_config_;
 };
 
-// Demuxer placeholder for URL player. Carries the media URL and exposes
-// placeholder streams required by the stream-based pipeline initialization.
-// Owned by PipelineImpl. Created and accessed on the media thread.
+// Demuxer for the URL player. Carries the media URL, receives the metadata
+// that only the platform player knows, and exposes an audio and a video
+// UrlPlayerDemuxerStream. Owned by PipelineImpl. Created and accessed on the
+// media thread.
 class MEDIA_EXPORT UrlPlayerDemuxer : public Demuxer,
                                       public UrlPlayerMediaResource {
  public:

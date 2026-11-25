@@ -33,10 +33,12 @@
 #include "media/base/pipeline.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/ranges.h"
+#include "media/base/video_codecs.h"
 #include "media/base/video_decoder_config.h"
 #include "media/filters/demuxer_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -92,6 +94,55 @@ TEST_F(UrlPlayerDemuxerTest, StreamsAreUnencrypted) {
       GetStream(DemuxerStream::AUDIO)->audio_decoder_config().is_encrypted());
   EXPECT_FALSE(
       GetStream(DemuxerStream::VIDEO)->video_decoder_config().is_encrypted());
+}
+
+TEST_F(UrlPlayerDemuxerTest, AudioStreamHasNoPlaceholderConfig) {
+  ASSERT_TRUE(GetStream(DemuxerStream::AUDIO));
+  const AudioDecoderConfig config =
+      GetStream(DemuxerStream::AUDIO)->audio_decoder_config();
+  EXPECT_FALSE(config.IsValidConfig()) << config.AsHumanReadableString();
+}
+
+TEST_F(UrlPlayerDemuxerTest, VideoStreamHasNoPlaceholderCodec) {
+  ASSERT_TRUE(GetStream(DemuxerStream::VIDEO));
+  const VideoDecoderConfig config =
+      GetStream(DemuxerStream::VIDEO)->video_decoder_config();
+  EXPECT_EQ(config.codec(), VideoCodec::kUnknown)
+      << config.AsHumanReadableString();
+  EXPECT_EQ(config.profile(), VIDEO_CODEC_PROFILE_UNKNOWN)
+      << config.AsHumanReadableString();
+}
+
+TEST_F(UrlPlayerDemuxerTest, VideoNaturalSizeIs1x1BeforePlatformMetadata) {
+  ASSERT_TRUE(GetStream(DemuxerStream::VIDEO));
+  EXPECT_EQ(
+      GetStream(DemuxerStream::VIDEO)->video_decoder_config().natural_size(),
+      gfx::Size(1, 1));
+}
+
+TEST_F(UrlPlayerDemuxerTest, PlatformMetadataSetsVideoNaturalSize) {
+  InitializeDemuxer();
+  EXPECT_CALL(host_, SetDuration(base::Seconds(10966)));
+  demuxer_.OnPlatformMetadata(base::Seconds(10966), gfx::Size(1920, 1080));
+
+  ASSERT_TRUE(GetStream(DemuxerStream::VIDEO));
+  const VideoDecoderConfig config =
+      GetStream(DemuxerStream::VIDEO)->video_decoder_config();
+  EXPECT_EQ(config.natural_size(), gfx::Size(1920, 1080));
+  EXPECT_EQ(config.codec(), VideoCodec::kUnknown);
+  EXPECT_FALSE(config.is_encrypted());
+}
+
+TEST_F(UrlPlayerDemuxerTest, EmptyPlatformSizeKeepsVideoNaturalSize) {
+  InitializeDemuxer();
+  EXPECT_CALL(host_, SetDuration(_)).Times(2);
+  demuxer_.OnPlatformMetadata(base::Seconds(10966), gfx::Size(1920, 1080));
+  demuxer_.OnPlatformMetadata(base::Seconds(10966), gfx::Size());
+
+  ASSERT_TRUE(GetStream(DemuxerStream::VIDEO));
+  EXPECT_EQ(
+      GetStream(DemuxerStream::VIDEO)->video_decoder_config().natural_size(),
+      gfx::Size(1920, 1080));
 }
 
 TEST_F(UrlPlayerDemuxerTest, PlatformDurationChangeReachesHost) {

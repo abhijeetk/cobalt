@@ -82,7 +82,7 @@ enum HdcpProtectionState {
 /**
  *  @brief The current position of the play head in microseconds.
  */
-@property(nonatomic) NSInteger currentMediaTime;
+@property(nonatomic, readonly) NSInteger currentMediaTime;
 
 /**
  *  @brief The rate of playback for this player.
@@ -105,8 +105,9 @@ enum HdcpProtectionState {
 @property(nonatomic) SBDApplicationDrmSystem* drmSystem;
 
 /**
- *  @brief Similar to setting the currentMediaTime, but ensure it is done
- *      on the proper thread.
+ *  @brief Seeks to @c time on the main thread. Presenting is reported with
+ *      @c ticket once this seek, and no newer one, completes. A seek before
+ *      @c kSbPlayerStateInitialized is reported is ignored.
  */
 - (void)seekTo:(NSInteger)time ticket:(int)ticket;
 

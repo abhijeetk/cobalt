@@ -415,6 +415,31 @@ TEST_F(SbUrlPlayerPrepareTest, SeekBeforeInitializedIsIgnored) {
                                              kSecondSeekTicket, kSeekTimeout));
 }
 
+TEST_F(SbUrlPlayerPrepareTest, BackToBackSeeksPresentOnlyTheLastTicket) {
+  ASSERT_NO_FATAL_FAILURE(CreatePlayer(kFixturePath));
+  ASSERT_NO_FATAL_FAILURE(WaitForPlayerState(
+      kSbPlayerStateInitialized, SB_PLAYER_INITIAL_TICKET, kPrepareTimeout));
+
+  // The second seek supersedes the first, which must not report Presenting
+  // under either ticket.
+  constexpr int64_t kFirstTarget = 500'000;
+  constexpr int64_t kSecondTarget = 1'500'000;
+  SbPlayerSeek(player_, kFirstTarget, kSeekTicket);
+  SbPlayerSeek(player_, kSecondTarget, kSecondSeekTicket);
+
+  ASSERT_NO_FATAL_FAILURE(WaitForPlayerState(kSbPlayerStatePresenting,
+                                             kSecondSeekTicket, kSeekTimeout));
+  // Presenting must mean that the second seek has already landed.
+  SbPlayerInfo info = {};
+  SbPlayerGetInfo(player_, &info);
+  EXPECT_NEAR(info.current_media_timestamp, kSecondTarget, 100'000);
+
+  DrainCallbacksFor(kSettleTime);
+  EXPECT_EQ(CountPlayerState(kSbPlayerStatePresenting, kSeekTicket), 0);
+  EXPECT_EQ(CountPlayerState(kSbPlayerStatePresenting, kSecondSeekTicket), 1);
+  EXPECT_TRUE(errors().empty());
+}
+
 #endif  // BUILDFLAG(IS_IOS_TVOS)
 
 }  // namespace

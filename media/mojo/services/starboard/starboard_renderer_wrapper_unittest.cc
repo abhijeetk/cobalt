@@ -542,6 +542,14 @@ TEST_F(StarboardRendererWrapperTest, TimerLifecycle) {
   task_environment_.RunUntilIdle();
 }
 
+#if BUILDFLAG(IS_IOS_TVOS)
+TEST_F(StarboardRendererWrapperTest, InitializeWithEmptyUrlRepliesFalse) {
+  base::MockOnceCallback<void(bool)> url_init_cb;
+  EXPECT_CALL(url_init_cb, Run(false));
+  renderer_wrapper_->InitializeWithUrl(std::string(), url_init_cb.Get());
+}
+#endif  // BUILDFLAG(IS_IOS_TVOS)
+
 }  // namespace
 
 }  // namespace media
